@@ -21,6 +21,7 @@
 
 # %%
 import numpy as np
+from numpy._typing import NDArray
 import pandas as pd
 from IPython.display import display
 
@@ -308,21 +309,68 @@ display(pd.DataFrame(V.T))
 # Experiment with example 4.1: what effect does it have to change the policy, e.g. so that an agent always goes left or always goes right? What effect does it have on state values to change the value of the discount factor (```gamma```)?
 
 # %%
-# TODO: implement your code here
+# World is 4x4
+world = World(4, 4)
+
+# Rewards are -1 for each move (including when hitting a terminal state, "+"):
+REWARDS = {" ": -1, "+": -1}
+
+
+# Add terminal states in two corners
+world.add_terminal(0, 0, "+")
+world.add_terminal(3, 3, "+")
+
+print(world.grid.T)
+
+
+# %%
+def always_right_policy(x, y):
+    return {k: 1 if k == "right" else 0 for k in ACTIONS}
+
+
+print(always_right_policy(0, 0))
+# Set gamma to converge
+gamma = 0.5
+V = iterative_policy_evaluation(world, always_right_policy)
+
+display(pd.DataFrame(V.T))
+
 
 # %% [markdown]
 # Try to write a policy that is deterministic, but where the action performed differs between states. You can implement it as a two-dimensional array with the dimensions corresponding to the world dimensions and have each entry be an action for the corresponding state.
 
+
 # %%
-# TODO: implement you code here
+def deterministic_policy(x, y):
+    if y == 0:
+        return {k: 1 if k == "left" else 0 for k in ACTIONS}
+    elif y == 1:
+        return {k: 1 if k == "up" else 0 for k in ACTIONS}
+    elif y == 2:
+        return {k: 1 if k == "down" else 0 for k in ACTIONS}
+    elif y == 3:
+        return {k: 1 if k == "right" else 0 for k in ACTIONS}
+    else:
+        assert 0, f"Y is out of bounds: {y}"
+
+
+gamma = 1
+V = iterative_policy_evaluation(world, deterministic_policy)
+
+display(pd.DataFrame(V.T))
+
 
 # %% [markdown]
 # ## Exercise - stochasticity
-#
 # You can adjust the degree of stochasticity in the environment by setting the global variable ```rand_move_probability``` (the probability of the world ignoring an action and performing a random move instead). What effect does stochasticity have on the state-value estimates?
 
+
 # %%
-# TODO: implement you code here
+rand_move_probability = 0.5
+
+V = iterative_policy_evaluation(world, deterministic_policy)
+
+display(pd.DataFrame(V.T))
 
 # %% [markdown]
 # ## Exercise - robot, cake and mouse trap
@@ -330,7 +378,32 @@ display(pd.DataFrame(V.T))
 # Implement a robot, cake and mouse trap example and compute state value estimates under different policies (equiprobable, always right, always right:50% or up:50%) with and without stochasticity.
 
 # %%
-# TODO: implement you code here
+rand_move_probability = 0
+gamma = 1
+REWARDS = {" ": 0, ".": -0.1, "+": 10, "-": -10}
+
+
+world = World(4, 3)
+world.add_terminal(3, 0, "+")  # Cake
+world.add_terminal(3, 1, "-")  # Mouse trap
+
+world.add_obstacle(1, 1)
+
+
+def always_up_right_policy(x, y):
+    return {k: 0.5 if (k == "right" or k == "up") else 0 for k in ACTIONS}
+
+
+for prob in [0, 0.25, 0.5]:
+    rand_move_probability = prob
+    V1 = iterative_policy_evaluation(world, equiprobable_random_policy)
+    V2 = iterative_policy_evaluation(world, always_right_policy)
+    V3 = iterative_policy_evaluation(world, always_up_right_policy)
+
+    print("\n" + "_" * 30)
+    print(f"rand_move_probability: {prob}")
+    print("_" * 30)
+    display(pd.DataFrame(V1.T), pd.DataFrame(V2.T), pd.DataFrame(V3.T))
 
 # %% [markdown]
 # ## Exercise - action-value function
@@ -339,10 +412,26 @@ display(pd.DataFrame(V.T))
 
 
 # %%
-def action_value(world, V, state, action):
-    # TODO: implement your code here
-    pass
+def action_value(world: World, V, state, action):
+    q = 0
+    for next_state, prob in world.get_state_transition_probabilities(
+        state, action
+    ).items():
+        nx, ny = next_state
+        q += prob * (world.get_reward(nx, ny) + gamma * V[nx, ny])
+    return q
 
+
+# %%
+# Testing the action
+world = World(4, 4)
+world.add_terminal(0, 0, "+")
+world.add_terminal(3, 3, "-")
+V = iterative_policy_evaluation(world, equiprobable_random_policy)
+display(pd.DataFrame(V.T))
+for a in ACTIONS:
+    print(f"Action value for {a}:")
+    print(action_value(world, V, (1, 1), a))
 
 # %% [markdown]
 # ## Exercise - policy iteration
@@ -354,7 +443,54 @@ def action_value(world, V, state, action):
 # Test your implementation and print out the policies found.
 
 # %%
-# TODO: implement you code here
+REWARDS = {" ": 0, ".": -0.1, "+": 10, "-": -10}
+gamma = 1
+world = World(4, 4)
+world.add_terminal(0, 0, "+")
+world.add_terminal(3, 3, "-")
+world.add_obstacle(1, 1)
+world.add_obstacle(3, 2)
+
+# Start with a right policy everywhere
+polit_policy = np.full((world.width, world.height), "right", dtype="U5")
+
+
+def policy_iteration_policy(x, y):
+    return {k: 1 if k == polit_policy[x, y] else 0 for k in ACTIONS}
+
+
+V = iterative_policy_evaluation(world, policy_iteration_policy)
+
+while True:
+    policy_stable = True
+    V = iterative_policy_evaluation(world, policy_iteration_policy)
+
+    for y in range(world.height):
+        for x in range(world.width):
+            if not world.is_obstacle(x, y):
+                old_action = polit_policy[x, y]
+                best_action = None
+                best_value = -np.inf
+                for a in ACTIONS:
+                    q = action_value(world, V, (x, y), a)
+                    if q > best_value:
+                        best_value = q
+                        best_action = a
+                polit_policy[x, y] = best_action
+                if old_action != best_action:
+                    policy_stable = False
+    if policy_stable:
+        break
+
+# Display the world
+display(pd.DataFrame(world.grid.T))
+
+# Display the final policy
+display(pd.DataFrame(polit_policy.T))
+
+# Display the final state values
+display(pd.DataFrame(V.T))
+
 
 # %% [markdown]
 # ## Exercise - value iteration
@@ -364,4 +500,51 @@ def action_value(world, V, state, action):
 # Test your implementation and display the policies found (i.e., a grid with the perferred action in each cell).
 
 # %%
-# TODO: implement you code here
+REWARDS = {" ": 0, ".": -0.1, "+": 10, "-": -10}
+gamma = 1
+world = World(4, 4)
+world.add_terminal(0, 0, "+")
+world.add_terminal(3, 3, "-")
+world.add_obstacle(1, 1)
+world.add_obstacle(3, 2)
+
+# Start with a right policy everywhere
+valit_policy = np.full((world.width, world.height), "right", dtype="U5")
+
+
+def value_iteration_policy(x, y):
+    return {k: 1 if k == valit_policy[x, y] else 0 for k in ACTIONS}
+
+
+# Start with initial value estimates
+V = iterative_policy_evaluation(world, value_iteration_policy)
+
+theta = 1e-5
+while True:
+    delta = 0
+    for y in range(world.height):
+        for x in range(world.width):
+            if not world.is_obstacle(x, y):
+                old_value = V[x, y]
+                best_value = -np.inf
+                best_action = None
+                for a in ACTIONS:
+                    q = action_value(world, V, (x, y), a)
+                    if q > best_value:
+                        best_action = a
+                        best_value = q
+                V[x, y] = best_value
+                valit_policy[x, y] = best_action
+                delta = max(delta, abs(old_value - V[x, y]))
+
+    if delta <= theta:
+        break
+
+# Display the world
+display(pd.DataFrame(world.grid.T))
+
+# Display the final policy
+display(pd.DataFrame(valit_policy.T))
+
+# Display the final state values
+display(pd.DataFrame(V.T))
