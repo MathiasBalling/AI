@@ -3,6 +3,8 @@
 ## Syntax
 
 ```python
+# py:percent format
+
 # %% [markdown]
 # This is a markdown cell
 
@@ -14,35 +16,35 @@ def f(x):
 
 ## Usage
 
-1. This makes a pair of synced py and ipynb files, `<name>.sync.py` and `<name>.sync.ipynb`.
+This makes a pair of synced py and ipynb files, `<name>.sync.py` and `<name>.sync.ipynb`.
 
-   ```bash
-   python -m jupyter_ascending.scripts.make_pair --base <name>
-   ```
+```bash
+python -m jupyter_ascending.scripts.make_pair --base <name>
+```
 
-2. Start jupyter and open the notebook:
+Start jupyter and open the notebook:
 
-   ```bash
-   python -m jupyter notebook <name>.sync.ipynb
-   ```
+```bash
+python -m jupyter notebook <name>.sync.ipynb
+```
 
-3. Add some code to the `.sync.py` file, e.g.
+Convert `<name>.ipynb` to `<name>.py` in py percent format
 
-   ```bash
-     echo 'print("Hello World!")' >> <name>.sync.py
-   ```
+```bash
+jupytext --to py:percent <name>.ipynb
+```
 
-4. Sync the code into the jupyter notebook (without nvim plugin):
+Sync the code into the jupyter notebook (without nvim plugin):
 
-   ```bash
-   python -m jupyter_ascending.requests.sync --filename <name>.sync.py
-   ```
+```bash
+python -m jupyter_ascending.requests.sync --filename <name>.sync.py
+```
 
-5. Run that cell of code (without nvim plugin):
+Run that cell of code (without nvim plugin):
 
-   ```bash
-   python -m jupyter_ascending.requests.execute --filename <name>.sync.py --line 16
-   ```
+```bash
+python -m jupyter_ascending.requests.execute --filename <name>.sync.py --line 16
+```
 
 ## Installation
 
