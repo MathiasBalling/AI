@@ -424,7 +424,7 @@ for x in range(world.width):
         Q1[(x, y)] = {action: 0.0 for action in ACTIONS}
         Q2[(x, y)] = {action: 0.0 for action in ACTIONS}
 
-nb_episodes = 100000
+nb_episodes = 50000
 for i in tqdm(range(nb_episodes)):
     Q1, Q2 = double_q_learning(
         world=world,
@@ -433,8 +433,8 @@ for i in tqdm(range(nb_episodes)):
         Q1=Q1,
         Q2=Q2,
         gamma=1,
-        alpha=0.1,
-        epsilon=0.2,
+        alpha=0.05,
+        epsilon=0.15,
     )
 
 final_policy = np.full((world.width, world.height), "          ")
@@ -446,10 +446,8 @@ for i in range(world.width):
             final_policy[(i, j)] = "#"
         else:
             combined_Q = {
-                action: Q1[(i, j)].get(action, 0) + Q2[(i, j)].get(action, 0)
-                for action in Q1[(i, j)]
+                action: Q1[(i, j)][action] + Q2[(i, j)][action] for action in ACTIONS
             }
             final_policy[(i, j)] = max(combined_Q, key=combined_Q.get)
-            # print(f"{Q1[(i, j)]}{Q2[(i,j)]}{max(combined_Q,key=combined_Q.get)}")
 
 display(pd.DataFrame(final_policy.T))
