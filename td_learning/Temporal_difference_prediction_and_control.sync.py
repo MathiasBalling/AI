@@ -304,84 +304,66 @@ for episode in range(EPISODES):
 
 # %%
 def greedy_policy(Q, state, epsilon):
-    """
-    Selects an action using an epsilon-greedy policy.
+    a = {action: epsilon / len(ACTIONS) for action in ACTIONS}
 
-    Args:
-        Q (dict): The Q-table containing state-action values.
-        state (tuple): The current state.
-        epsilon (float): The probability of selecting a random action (exploration).
+    _, max_value = max(Q[state].items(), key=lambda x: x[1])
+    # Count cells that have the same max value
+    max_value_count = sum(Q[state][action] == max_value for action in ACTIONS)
+    for action in ACTIONS:
+        if Q[state][action] == max_value:
+            a[action] += (1 - epsilon) / max_value_count
 
-    Returns:
-        action (str): The action selected.
-    """
-    if random.random() < epsilon:
-        return random.choice(ACTIONS)
-    else:
-        if state not in Q:
-            Q[state] = {action: 0.0 for action in ACTIONS}
-        return max(Q[state], key=Q[state].get)
+    return a
 
 
-def SARSA(world: World, n_episodes, gamma=0.9, alpha=0.1, epsilon=0.1, use_wind=False):
-    """
-    Implements the SARSA algorithm for on-policy TD control.
+def SARSA(
+    world: World,
+    start_state,
+    policy,
+    Q,
+    gamma=0.9,
+    alpha=0.1,
+    epsilon=0.1,
+    use_wind=False,
+):
+    # Initialize the starting action
+    possible_actions = policy(Q, start_state, epsilon)
 
-    Args:
-        world (World): The environment in which the agent operates.
-        n_episodes (int): The number of episodes to run the algorithm.
-        gamma (float): The discount factor.
-        alpha (float): The learning rate.
-        epsilon (float): The probability of selecting a random action (exploration).
+    # Initialize the starting action
+    current_action = random.choices(
+        population=list(possible_actions.keys()),
+        weights=list(possible_actions.values()),
+        k=1,
+    )[0]
 
-    Returns:
-        Q (dict): The Q-table containing state-action values.
-    """
-    Q = {}
+    current_state = start_state
+    while not world.is_terminal(*current_state):
+        # Get the next state, action, and reward
+        if use_wind:
+            next_state = world.get_next_state_windy(current_state, current_action)
+        else:
+            next_state = world.get_next_state(current_state, current_action)
 
-    for _ in range(n_episodes):
-        # Initialize the starting state
-        start_state = (
-            random.randint(0, world.width - 1),
-            random.randint(0, world.height - 1),
+        possible_actions = policy(Q, current_state, epsilon)
+
+        next_action = random.choices(
+            population=list(possible_actions.keys()),
+            weights=list(possible_actions.values()),
+            k=1,
+        )[0]
+
+        reward = world.get_reward(*next_state)
+
+        # Update the Q-value for the current state-action pair
+        Q[current_state][current_action] += alpha * (
+            reward
+            + gamma * Q[next_state][next_action]
+            - Q[current_state][current_action]
         )
-        # Make sure the starting state is not a terminal or obstacle
-        while world.is_terminal(*start_state) or world.is_obstacle(*start_state):
-            start_state = (
-                random.randint(0, world.width - 1),
-                random.randint(0, world.height - 1),
-            )
 
-        # Initialize the starting action
-        current_action = greedy_policy(Q, start_state, epsilon)
-
-        current_state = start_state
-        while not world.is_terminal(*current_state):
-            # Get the next state, action, and reward
-            if use_wind:
-                next_state = world.get_next_state_windy(current_state, current_action)
-            else:
-                next_state = world.get_next_state(current_state, current_action)
-
-            next_action = greedy_policy(Q, next_state, epsilon)
-            reward = world.get_reward(*next_state)
-
-            # Helper to initialize Q-values for new states and actions
-            if current_state not in Q:
-                Q[current_state] = {action: 0.0 for action in ACTIONS}
-            if next_state not in Q:
-                Q[next_state] = {action: 0.0 for action in ACTIONS}
-
-            # Update the Q-value for the current state-action pair
-            Q[current_state][current_action] += alpha * (
-                reward
-                + gamma * Q[next_state][next_action]
-                - Q[current_state][current_action]
-            )
-
-            # Move to the next state and action
-            current_action = next_action
-            current_state = next_state
+        # Move to the next state and action
+        current_action = next_action
+        current_state = next_state
 
     return Q
 
@@ -392,7 +374,24 @@ world = World(3, 3)
 world.add_terminal(1, 2, "+")
 display(pd.DataFrame(world.grid.T))
 
-Q = SARSA(world, 50000)
+nb_episodes = 10000
+Q = {}
+for x in range(world.width):
+    for y in range(world.height):
+        Q[(x, y)] = {action: 0.0 for action in ACTIONS}
+
+for i in range(nb_episodes):
+    Q = SARSA(
+        world=world,
+        start_state=(0, 0),
+        policy=greedy_policy,
+        Q=Q,
+        gamma=0.9,
+        alpha=0.1,
+        epsilon=0.1,
+        use_wind=False,
+    )
+
 final_policy = np.full((world.width, world.height), "          ")
 for i in range(world.width):
     for j in range(world.height):
@@ -424,7 +423,33 @@ world.add_terminal(4, 4, "+")
 
 display(pd.DataFrame(world.grid.T))
 
-Q = SARSA(world, 30000, use_wind=True)
+windy_grid = np.full((world.width, world.height), "          ")
+for x in range(world.width):
+    for y in range(world.height):
+        if world.windy_grid[x, y][1] >= 1:
+            windy_grid[x, y] = (
+                f"{world.windy_grid[(x, y)][0]} : {world.windy_grid[(x, y)][1]}"
+            )
+display(pd.DataFrame(windy_grid.T))
+
+nb_episodes = 10000
+Q = {}
+for x in range(world.width):
+    for y in range(world.height):
+        Q[(x, y)] = {action: 0.0 for action in ACTIONS}
+
+for i in range(nb_episodes):
+    Q = SARSA(
+        world=world,
+        start_state=(0, 0),
+        policy=greedy_policy,
+        Q=Q,
+        gamma=0.9,
+        alpha=0.1,
+        epsilon=0.1,
+        use_wind=True,
+    )
+
 final_policy = np.full((world.width, world.height), "          ")
 for i in range(world.width):
     for j in range(world.height):
@@ -450,7 +475,43 @@ ACTIONS = (
     "down-left",
     "down-right",
 )
-Q = SARSA(world, 30000, use_wind=True)
+world = World(width=5, height=5)
+
+# Add wind to the grid in x=2 with strength 1
+for i in range(world.height):
+    world.add_wind(2, i, "up", 1)
+
+world.add_terminal(4, 4, "+")
+
+display(pd.DataFrame(world.grid.T))
+
+windy_grid = np.full((world.width, world.height), "          ")
+for x in range(world.width):
+    for y in range(world.height):
+        if world.windy_grid[x, y][1] >= 1:
+            windy_grid[x, y] = (
+                f"{world.windy_grid[(x, y)][0]} : {world.windy_grid[(x, y)][1]}"
+            )
+display(pd.DataFrame(windy_grid.T))
+
+nb_episodes = 10000
+Q = {}
+for x in range(world.width):
+    for y in range(world.height):
+        Q[(x, y)] = {action: 0.0 for action in ACTIONS}
+
+for i in range(nb_episodes):
+    Q = SARSA(
+        world=world,
+        start_state=(0, 0),
+        policy=greedy_policy,
+        Q=Q,
+        gamma=0.9,
+        alpha=0.1,
+        epsilon=0.1,
+        use_wind=True,
+    )
+
 final_policy = np.full((world.width, world.height), "          ")
 for i in range(world.width):
     for j in range(world.height):

@@ -49,7 +49,7 @@ TERMINALS = ("+", "-")  # Note a terminal should also have a reward assigned
 OBSTACLES = "#"
 
 # Discount factor
-gamma = 1
+gamma = 0.8
 
 # The probability of a random move:
 rand_move_probability = 0
@@ -330,7 +330,6 @@ def always_right_policy(x, y):
 
 print(always_right_policy(0, 0))
 # Set gamma to converge
-gamma = 0.5
 V = iterative_policy_evaluation(world, always_right_policy)
 
 display(pd.DataFrame(V.T))
@@ -354,7 +353,6 @@ def deterministic_policy(x, y):
         assert 0, f"Y is out of bounds: {y}"
 
 
-gamma = 1
 V = iterative_policy_evaluation(world, deterministic_policy)
 
 display(pd.DataFrame(V.T))
@@ -379,7 +377,6 @@ display(pd.DataFrame(V.T))
 
 # %%
 rand_move_probability = 0
-gamma = 1
 REWARDS = {" ": 0, ".": -0.1, "+": 10, "-": -10}
 
 
@@ -444,7 +441,6 @@ for a in ACTIONS:
 
 # %%
 REWARDS = {" ": 0, ".": -0.1, "+": 10, "-": -10}
-gamma = 1
 world = World(4, 4)
 world.add_terminal(0, 0, "+")
 world.add_terminal(3, 3, "-")
@@ -501,7 +497,6 @@ display(pd.DataFrame(V.T))
 
 # %%
 REWARDS = {" ": 0, ".": -0.1, "+": 10, "-": -10}
-gamma = 1
 world = World(4, 4)
 world.add_terminal(0, 0, "+")
 world.add_terminal(3, 3, "-")

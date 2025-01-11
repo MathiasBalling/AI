@@ -21,7 +21,7 @@
 # ### Install dependencies
 
 # %% colab={"base_uri": "https://localhost:8080/"}
-# ! pip install numpy pandas
+# ! pip install numpy pandas tqdm
 
 # %% [markdown]
 # ### Imports
@@ -32,6 +32,7 @@ import random
 import sys  # We use sys to get the max value of a float
 from IPython.display import display
 import pandas as pd  # We only use pandas for displaying tables nicely
+from tqdm import tqdm
 
 pd.options.display.float_format = "{:,.3f}".format
 
@@ -137,7 +138,7 @@ class World:
 # %% [markdown]
 # ## A simple world
 
-# %% colab={"base_uri": "https://localhost:8080/"}
+# %%
 world = World(4, 6)
 
 # Since we only focus on episodic tasks, we must have a terminal state that the
@@ -159,57 +160,45 @@ print(world.grid.T)
 
 # %%
 def greedy_policy(Q, state, epsilon):
-    if random.random() < epsilon:
-        return random.choice(ACTIONS)
-    else:
-        if state not in Q:
-            Q[state] = {action: 0.0 for action in ACTIONS}
-        return max(Q[state], key=Q[state].get)
+    a = {action: epsilon / len(ACTIONS) for action in ACTIONS}
+
+    _, max_value = max(Q[state].items(), key=lambda x: x[1])
+    # Count cells that have the same max value
+    max_value_count = sum(Q[state][action] == max_value for action in ACTIONS)
+    for action in ACTIONS:
+        if Q[state][action] == max_value:
+            a[action] += (1 - epsilon) / max_value_count
+
+    return a
 
 
-def q_learning(world: World, n_episodes, gamma=0.9, alpha=0.1, epsilon=0.1):
-    Q = {}
+def q_learning(world: World, start_state, policy, Q, gamma=0.9, alpha=0.1, epsilon=0.1):
+    current_state = start_state
+    while not world.is_terminal(*current_state):
+        # Choose the next action based on the epsilon-greedy policy
+        possible_actions = policy(Q, current_state, epsilon)
 
-    for _ in range(n_episodes):
-        # Initialize the start state
-        start_state = (
-            random.randint(0, world.width - 1),
-            random.randint(0, world.height - 1),
+        # Initialize the starting action
+        current_action = random.choices(
+            population=list(possible_actions.keys()),
+            weights=list(possible_actions.values()),
+            k=1,
+        )[0]
+
+        # Get the next state and reward
+        next_state = world.get_next_state(current_state, current_action)
+        reward = world.get_reward(*next_state)
+
+        # Find the best next action in the next state
+        best_next_action_value = max(Q[next_state].values())
+
+        # Update the Q-table
+        Q[current_state][current_action] += alpha * (
+            reward + gamma * best_next_action_value - Q[current_state][current_action]
         )
-        # Make sure the start state is not a terminal or obstacle
-        while world.is_terminal(*start_state) or world.is_obstacle(*start_state):
-            start_state = (
-                random.randint(0, world.width - 1),
-                random.randint(0, world.height - 1),
-            )
 
-        current_state = start_state
-        while not world.is_terminal(*current_state):
-            # Choose the next action based on the epsilon-greedy policy
-            current_action = greedy_policy(Q, start_state, epsilon)
-
-            # Get the next state and reward
-            next_state = world.get_next_state(current_state, current_action)
-            reward = world.get_reward(*next_state)
-
-            # Helper to create the Q-table entries if they do not exist
-            if current_state not in Q:
-                Q[current_state] = {action: 0.0 for action in ACTIONS}
-            if next_state not in Q:
-                Q[next_state] = {action: 0.0 for action in ACTIONS}
-
-            # Find the best next action in the next state
-            best_next_action_value = max(Q[next_state].values())
-
-            # Update the Q-table
-            Q[current_state][current_action] += alpha * (
-                reward
-                + gamma * best_next_action_value
-                - Q[current_state][current_action]
-            )
-
-            # Update the state
-            current_state = next_state
+        # Update the state
+        current_state = next_state
 
     # Return the Q-table after training to be used as a policy
     return Q
@@ -221,7 +210,23 @@ world = World(3, 3)
 world.add_terminal(1, 2, "+")
 display(pd.DataFrame(world.grid.T))
 
-Q = q_learning(world, 100, gamma=0.9, alpha=0.1, epsilon=0.1)
+Q = {}
+for x in range(world.width):
+    for y in range(world.height):
+        Q[(x, y)] = {action: 0.0 for action in ACTIONS}
+
+nb_episodes = 10000
+for i in range(nb_episodes):
+    Q = q_learning(
+        world=world,
+        start_state=(0, 0),
+        policy=greedy_policy,
+        Q=Q,
+        gamma=0.9,
+        alpha=0.1,
+        epsilon=0.1,
+    )
+
 final_policy = np.full((world.width, world.height), "          ")
 for i in range(world.width):
     for j in range(world.height):
@@ -314,14 +319,14 @@ class Example67MDP:
 
 # %%
 # Create an instance of Example 6.7 with 10 actions in B
-example = Example67MDP(10)
-
-gamma = 1
-alpha = 0.05
-
-# Create two Q-tables (feel free to use your own representation):
-Q1 = [[0 for _ in range(len(example.get_actions(state)))] for state in STATES]
-Q2 = [[0 for _ in range(len(example.get_actions(state)))] for state in STATES]
+# example = Example67MDP(10)
+#
+# gamma = 1
+# alpha = 0.05
+#
+# # Create two Q-tables (feel free to use your own representation):
+# Q1 = [[0 for _ in range(len(example.get_actions(state)))] for state in STATES]
+# Q2 = [[0 for _ in range(len(example.get_actions(state)))] for state in STATES]
 
 # Uncomment to disable double-Q-learning:
 # Q2 = Q1
@@ -331,17 +336,120 @@ Q2 = [[0 for _ in range(len(example.get_actions(state)))] for state in STATES]
 # rewrite the function below:
 
 
-def e_greedy_dql_policy(state):
-    global example
-    actions = {
-        a: epsilon / len(example.get_actions(state)) for a in example.get_actions(state)
-    }
-    # Do a Q1 + Q2 to do epsilon greedy based on both tables:
-    Q = [sum(x) for x in zip(Q1[STATES.index(state)], Q2[STATES.index(state)])]
-    actions[example.get_actions(state)[np.argmax(Q)]] = (
-        1 - epsilon + epsilon / len(example.get_actions(state))
+# def e_greedy_dql_policy(state):
+#     global example
+#     actions = {
+#         a: epsilon / len(example.get_actions(state)) for a in example.get_actions(state)
+#     }
+#     # Do a Q1 + Q2 to do epsilon greedy based on both tables:
+#     Q = [sum(x) for x in zip(Q1[STATES.index(state)], Q2[STATES.index(state)])]
+#     actions[example.get_actions(state)[np.argmax(Q)]] = (
+#         1 - epsilon + epsilon / len(example.get_actions(state))
+#     )
+#     return actions
+
+
+# %%
+def double_q_learning(
+    world: World, start_state, policy, Q1, Q2, gamma=0.9, alpha=0.1, epsilon=0.1
+):
+    current_state = start_state
+    while not world.is_terminal(*current_state):
+        # Choose the next action based on the epsilon-greedy policy
+        possible_actions = policy(Q1, Q2, current_state, epsilon)
+
+        # Initialize the starting action
+        current_action = random.choices(
+            population=list(possible_actions.keys()),
+            weights=list(possible_actions.values()),
+            k=1,
+        )[0]
+
+        # Get the next state and reward
+        next_state = world.get_next_state(current_state, current_action)
+        reward = world.get_reward(*next_state)
+
+        if np.random.rand() < 0.5:
+            # Find best action from next state using Q1
+            q1_best_action = max(Q1[next_state], key=Q1[next_state].get)
+            # Update the Q1-table
+            Q1[current_state][current_action] += alpha * (
+                reward
+                + gamma * Q2[next_state][q1_best_action]
+                - Q1[current_state][current_action]
+            )
+        else:
+            # Find best action from next state using Q1
+            q2_best_action = max(Q2[next_state], key=Q2[next_state].get)
+            # Update the Q2-table
+            Q2[current_state][current_action] += alpha * (
+                reward
+                + gamma * Q1[next_state][q2_best_action]
+                - Q2[current_state][current_action]
+            )
+
+        # Update the state
+        current_state = next_state
+
+    # Return the Q-table after training to be used as a policy
+    return Q1, Q2
+
+
+# %%
+def greedy_policy_double(Q1, Q2, state, epsilon):
+    a = {action: epsilon / len(ACTIONS) for action in ACTIONS}
+
+    # Combine Q1 and Q2 values
+    combined_Q = {action: Q1[state][action] + Q2[state][action] for action in ACTIONS}
+
+    _, max_value = max(combined_Q.items(), key=lambda x: x[1])
+    # Count cells that have the same max value
+    max_value_count = sum(combined_Q[action] == max_value for action in ACTIONS)
+    for action in ACTIONS:
+        if combined_Q[action] == max_value:
+            a[action] += (1 - epsilon) / max_value_count
+
+    return a
+
+
+# %%
+ACTIONS = ("up", "down", "left", "right")
+world = World(6, 6)
+world.add_terminal(5, 5, "+")
+display(pd.DataFrame(world.grid.T))
+
+Q1, Q2 = {}, {}
+for x in range(world.width):
+    for y in range(world.height):
+        Q1[(x, y)] = {action: 0.0 for action in ACTIONS}
+        Q2[(x, y)] = {action: 0.0 for action in ACTIONS}
+
+nb_episodes = 100000
+for i in tqdm(range(nb_episodes)):
+    Q1, Q2 = double_q_learning(
+        world=world,
+        start_state=(0, 0),
+        policy=greedy_policy_double,
+        Q1=Q1,
+        Q2=Q2,
+        gamma=1,
+        alpha=0.1,
+        epsilon=0.2,
     )
-    return actions
 
+final_policy = np.full((world.width, world.height), "          ")
+for i in range(world.width):
+    for j in range(world.height):
+        if world.is_terminal(i, j):
+            final_policy[(i, j)] = "termnal"
+        elif world.is_obstacle(i, j):
+            final_policy[(i, j)] = "#"
+        else:
+            combined_Q = {
+                action: Q1[(i, j)].get(action, 0) + Q2[(i, j)].get(action, 0)
+                for action in Q1[(i, j)]
+            }
+            final_policy[(i, j)] = max(combined_Q, key=combined_Q.get)
+            # print(f"{Q1[(i, j)]}{Q2[(i,j)]}{max(combined_Q,key=combined_Q.get)}")
 
-### TODO: Implement double Q-learning
+display(pd.DataFrame(final_policy.T))

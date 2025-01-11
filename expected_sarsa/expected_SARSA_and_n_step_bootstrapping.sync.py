@@ -157,17 +157,6 @@ class World:
 #       value estimates and a policy-function that returns an epsilon greedy
 #       policy based on your estimates.
 def greedy_policy(Q, state, epsilon):
-    """
-    Selects an action using an epsilon-greedy policy.
-
-    Args:
-        Q (dict): The Q-table containing state-action values.
-        state (tuple): The current state.
-        epsilon (float): The probability of selecting a random action (exploration).
-
-    Returns:
-        action (str): The action selected.
-    """
     a = {action: epsilon / len(ACTIONS) for action in ACTIONS}
 
     _, max_value = max(Q[state].items(), key=lambda x: x[1])
@@ -308,9 +297,7 @@ def n_step_SARSA(
     T = sys.maxsize
 
     # For storing state, action, reward
-    actions = []
-    states = []
-    rewards = []
+    actions, states, rewards = [], [], []
 
     current_state = start_state
 

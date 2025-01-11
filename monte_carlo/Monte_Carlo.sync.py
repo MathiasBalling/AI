@@ -217,27 +217,19 @@ for i in range(5):
 
 
 # %%
-def mc_fv_prediction(world: World, policy, nb_episodes, gamma):
-    V = np.zeros((world.width, world.height))
-    Returns = {}
-    # Initialize returns as lists
-    for i in range(world.width):
-        for j in range(world.height):
-            Returns[i, j] = []
+def mc_fv_prediction(world: World, start_state, policy, V, returns, gamma):
+    # Generate a random start state
+    episode = generate_episode(world, policy, start_state)
 
-    for _ in range(nb_episodes):
-        # Generate a random start state
-        start_state = (np.random.randint(world.width), np.random.randint(world.height))
-        episode = generate_episode(world, policy, start_state)
-        G = 0
-        for t, (state, _, reward) in enumerate(reversed(episode)):
-            idx = len(episode) - t - 1
-            G = gamma * G + reward
-            if state not in [s for s, _, _ in episode[:idx]]:
-                Returns[state].append(G)
-                V[state] = np.average(Returns[state])
+    G = 0
+    for idx in reversed(range(len(episode))):
+        state, _, reward = episode[idx]
+        G = gamma * G + reward
+        if state not in [s for s, _, _ in episode[:idx]]:
+            returns[state].append(G)
+            V[state] = np.average(returns[state])
 
-    return V
+    return V, returns
 
 
 # %% [markdown]
@@ -274,10 +266,24 @@ def mc_fv_prediction(world: World, policy, nb_episodes, gamma):
 #
 
 # %%
-gamma = 0.9
 world = World(2, 3)
 world.add_terminal(1, 2, "+")
-V = mc_fv_prediction(world, equiprobable_random_policy, 10000, gamma)
+
+V = np.zeros((world.width, world.height))
+returns = {(i, j): [] for i in range(world.width) for j in range(world.height)}
+
+nb_episodes = 20000
+
+for i in range(nb_episodes):
+    V, returns = mc_fv_prediction(
+        world=world,
+        start_state=(0, 0),
+        policy=equiprobable_random_policy,
+        V=V,
+        returns=returns,
+        gamma=0.9,
+    )
+display(pd.DataFrame(world.grid.T))
 display(pd.DataFrame(V.T))
 
 # %% [markdown]
@@ -286,9 +292,23 @@ display(pd.DataFrame(V.T))
 # %%
 gamma = 0.9
 world = World(7, 5)
-world.add_terminal(1, 2, "+")
+world.add_terminal(1, 2, "-")
 world.add_terminal(2, 4, "+")
-V = mc_fv_prediction(world, equiprobable_random_policy, 10000, gamma)
+
+V = np.zeros((world.width, world.height))
+returns = {(i, j): [] for i in range(world.width) for j in range(world.height)}
+
+nb_episodes = 10000
+
+for i in range(nb_episodes):
+    V, returns = mc_fv_prediction(
+        world=world,
+        start_state=(6, 4),
+        policy=equiprobable_random_policy,
+        V=V,
+        returns=returns,
+        gamma=0.9,
+    )
 display(pd.DataFrame(world.grid.T))
 display(pd.DataFrame(V.T))
 
@@ -301,33 +321,21 @@ display(pd.DataFrame(V.T))
 
 
 # %%
-def mc_fv_state_action(world, policy, nb_episodes, gamma=0.9):
-    Q = {}
-    returns = {}
+def mc_fv_state_action(world: World, start_state, policy, Q, returns, gamma=0.9):
+    episode = generate_episode(world, policy, start_state)
 
-    # Initialize Q, policy, and returns
-    for i in range(world.width):
-        for j in range(world.height):
-            Q[(i, j)] = {action: 0.0 for action in ACTIONS}
-            returns[(i, j)] = {action: [] for action in ACTIONS}
+    G = 0
+    # Iterate forward through the episode
+    for idx in reversed(range(len(episode))):
+        state, action, reward = episode[idx]
+        G = gamma * G + reward
 
-    for _ in range(nb_episodes):
-        # Exploring start - random initial state and action
-        start_state = (0, 0)
-        episode = generate_episode(world, policy, start_state)
+        # Check if the (state, action) pair has been seen before in the episode
+        if (state, action) not in [(s, a) for s, a, _ in episode[:idx]]:
+            returns[state][action].append(G)
+            Q[state][action] = np.mean(returns[state][action])
 
-        G = 0
-        # Iterate forward through the episode
-        for t, (state, action, reward) in enumerate(reversed(episode)):
-            idx = len(episode) - t - 1
-            G = gamma * G + reward
-
-            # Check if the (state, action) pair has been seen before in the episode
-            if (state, action) not in [(s, a) for s, a, _ in episode[:idx]]:
-                returns[state][action].append(G)
-                Q[state][action] = np.mean(returns[state][action])
-
-    return Q
+    return Q, returns
 
 
 # %% [markdown]
@@ -337,8 +345,37 @@ def mc_fv_state_action(world, policy, nb_episodes, gamma=0.9):
 gamma = 0.9
 world = World(2, 3)
 world.add_terminal(1, 2, "+")
-Q = mc_fv_state_action(world, equiprobable_random_policy, 10000, gamma)
+Q = {}
+returns = {}
+for x in range(world.width):
+    for y in range(world.height):
+        Q[(x, y)] = {action: 0.0 for action in ACTIONS}
+        returns[(x, y)] = {action: [] for action in ACTIONS}
+
+nb_episodes = 10000
+for i in range(nb_episodes):
+    Q, returns = mc_fv_state_action(
+        world=world,
+        start_state=(0, 0),
+        policy=equiprobable_random_policy,
+        Q=Q,
+        returns=returns,
+        gamma=0.9,
+    )
+
+final_policy = np.full((world.width, world.height), "          ")
+for i in range(world.width):
+    for j in range(world.height):
+        if world.is_terminal(i, j):
+            final_policy[(i, j)] = "termnal"
+        elif world.is_obstacle(i, j):
+            final_policy[(i, j)] = "###"
+        else:
+            final_policy[(i, j)] = max(Q[(i, j)], key=Q[(i, j)].get)
+
+display(pd.DataFrame(world.grid.T))
 display(pd.DataFrame(Q))
+display(pd.DataFrame(final_policy.T))
 
 # %% [markdown]
 # ### Exercise: Implement on-policy Monte Carlo-based control with an $\epsilon$-soft policy
@@ -353,55 +390,71 @@ display(pd.DataFrame(Q))
 
 
 # %%
-def mc_epsillon_soft(world, nb_episodes, gamma=0.9, epsilon=0.1):
-    policy = {}
-    Q = {}
-    returns = {}
+def mc_epsillon_soft(world, start_state, Q, policy, returns, gamma=0.9, epsilon=0.1):
+    episode = generate_episode(world, lambda x, y: policy[(x, y)], start_state)
 
-    # Initialize Q, policy, and returns
-    for i in range(world.width):
-        for j in range(world.height):
-            Q[(i, j)] = {action: 0.0 for action in ACTIONS}
-            policy[(i, j)] = {action: 1 / len(ACTIONS) for action in ACTIONS}
-            returns[(i, j)] = {action: [] for action in ACTIONS}
+    G = 0
+    # Iterate forward through the episode
+    for idx in reversed(range(len(episode))):
+        state, action, reward = episode[idx]
+        G = gamma * G + reward
+        # Check if the (state, action) pair has been seen before in the episode
+        if (state, action) not in [(s, a) for s, a, _ in episode[:idx]]:
+            returns[state][action].append(G)
+            Q[state][action] = np.mean(returns[state][action])
 
-    for _ in range(nb_episodes):
-        start_state = (0, 0)
-        episode = generate_episode(world, lambda x, y: policy[(x, y)], start_state)
+            # Update policy to be greedy
+            best_action = max(Q[state], key=Q[state].get)
+            for a in ACTIONS:
+                policy[state][a] = (
+                    1 - epsilon + epsilon / abs(policy[state][a])
+                    if a == best_action
+                    else epsilon / abs(policy[state][a])
+                )
 
-        G = 0
-        # Iterate forward through the episode
-        for t, (state, action, reward) in enumerate(reversed(episode)):
-            idx = len(episode) - t - 1
-            G = gamma * G + reward
-            # Check if the (state, action) pair has been seen before in the episode
-            if (state, action) not in [(s, a) for s, a, _ in episode[:idx]]:
-                returns[state][action].append(G)
-                Q[state][action] = np.mean(returns[state][action])
-
-                # Update policy to be greedy
-                best_action = max(Q[state], key=Q[state].get)
-                for a in ACTIONS:
-                    policy[state][a] = (
-                        1 - epsilon + epsilon / abs(policy[state][a])
-                        if a == best_action
-                        else epsilon / abs(policy[state][a])
-                    )
-
-    return Q, policy
+    return Q, policy, returns
 
 
 # %% [markdown]
 # Try to experiment with your implementation by running it on different world sizes (be careful not to make your world too large or you should have multiple terminals that an agent is likely to hit, otherwise it may take too long), try to experiment with different numbers of episodes, and different values of epsilon:
 
 # %%
-world = World(3, 3)
-world.add_terminal(0, 0, "+")
-Q, policy = mc_epsillon_soft(world, 10000)
+world = World(4, 4)
+world.add_terminal(3, 3, "+")
+n_episodes = 10000
+
+Q = {}
+policy = {}
+returns = {}
+for x in range(world.width):
+    for y in range(world.height):
+        Q[(x, y)] = {action: 0.0 for action in ACTIONS}
+        policy[(x, y)] = {action: 1 / len(ACTIONS) for action in ACTIONS}
+        returns[(x, y)] = {action: [] for action in ACTIONS}
+
+
+for i in range(n_episodes):
+    Q, policy, returns = mc_epsillon_soft(
+        world=world,
+        start_state=(0, 0),
+        Q=Q,
+        policy=policy,
+        returns=returns,
+        gamma=0.9,
+        epsilon=0.1,
+    )
 
 display(pd.DataFrame(world.grid.T))
-display(pd.DataFrame(policy).T)
-display(pd.DataFrame(Q).T)
+final_policy = np.full((world.width, world.height), "          ")
+for i in range(world.width):
+    for j in range(world.height):
+        if world.is_terminal(i, j):
+            final_policy[(i, j)] = "termnal"
+        elif world.is_obstacle(i, j):
+            final_policy[(i, j)] = "###"
+        else:
+            final_policy[(i, j)] = max(Q[(i, j)], key=Q[(i, j)].get)
+display(pd.DataFrame(final_policy.T))
 
 # %% [markdown]
 # ### Optional exercise
@@ -410,57 +463,77 @@ display(pd.DataFrame(Q).T)
 
 
 # %%
-def mc_exploring_starts(world, nb_episodes, gamma=0.9):
-    policy = {}
-    Q = {}
-    returns = {}
-
-    # Initialize Q, policy, and returns
-    for i in range(world.width):
-        for j in range(world.height):
-            Q[(i, j)] = {action: 0.0 for action in ACTIONS}
-            policy[(i, j)] = {action: 1 / len(ACTIONS) for action in ACTIONS}
-            returns[(i, j)] = {action: [] for action in ACTIONS}
-
-    for _ in range(nb_episodes):
-        # Exploring start - random initial state and action
+def mc_exploring_starts(world, Q, policy, returns, gamma=0.9):
+    # Exploring start - random initial state and action
+    start_state = (
+        random.randint(0, world.width - 1),
+        random.randint(0, world.height - 1),
+    )
+    # Do not start in a terminal state or an obstacle
+    while world.is_terminal(*start_state) or world.is_obstacle(*start_state):
         start_state = (
             random.randint(0, world.width - 1),
             random.randint(0, world.height - 1),
         )
-        # Do not start in a terminal state or an obstacle
-        while world.is_terminal(*start_state) or world.is_obstacle(*start_state):
-            start_state = (
-                random.randint(0, world.width - 1),
-                random.randint(0, world.height - 1),
-            )
-        episode = generate_episode(world, lambda x, y: policy[(x, y)], start_state)
 
-        G = 0
-        # Iterate forward through the episode
-        for t, (state, action, reward) in enumerate(reversed(episode)):
-            idx = len(episode) - t - 1
-            G = gamma * G + reward
-            # Check if the (state, action) pair has been seen before in the episode
-            if (state, action) not in [(s, a) for s, a, _ in episode[:idx]]:
-                returns[state][action].append(G)
-                Q[state][action] = np.mean(returns[state][action])
+    episode = generate_episode(world, lambda x, y: policy[(x, y)], start_state)
 
-                # Update policy to be greedy
-                best_action = max(Q[state], key=Q[state].get)
-                for a in ACTIONS:
-                    policy[state][a] = 1 if a == best_action else 0
+    G = 0
+    # Iterate forward through the episode
+    for idx in reversed(range(len(episode))):
+        state, action, reward = episode[idx]
+        # print(f"State: {state}, Action: {action}, Reward: {reward}")
+        G = gamma * G + reward
+        # Check if the (state, action) pair has been seen before in the episode
+        if (state, action) not in [(s, a) for s, a, _ in episode[:idx]]:
+            returns[state][action].append(G)
+            Q[state][action] = np.mean(returns[state][action])
 
-    return Q, policy
+            # Update policy to be greedy
+            _, max_value = max(Q[state].items(), key=lambda x: x[1])
+            # Count cells that have the same max value
+            max_value_count = sum(Q[state][action] == max_value for action in ACTIONS)
+            for action in ACTIONS:
+                if Q[state][action] == max_value:
+                    policy[state][action] = 1 / max_value_count
+                else:
+                    policy[state][action] = 0
+
+    return Q, policy, returns
 
 
 # %%
-gamma = 0.9
-world = World(5, 5)
-world.add_terminal(0, 0, "+")
-world.add_terminal(4, 3, "+")
-Q, policy = mc_exploring_starts(world, 10000, gamma)
+world = World(4, 4)
+world.add_terminal(3, 3, "+")
+n_episodes = 10000
+
+Q = {}
+policy = {}
+returns = {}
+for x in range(world.width):
+    for y in range(world.height):
+        Q[(x, y)] = {action: 0.0 for action in ACTIONS}
+        policy[(x, y)] = {action: 1 / len(ACTIONS) for action in ACTIONS}
+        returns[(x, y)] = {action: [] for action in ACTIONS}
+
+
+for i in range(n_episodes):
+    Q, policy, returns = mc_exploring_starts(
+        world=world,
+        Q=Q,
+        policy=policy,
+        returns=returns,
+        gamma=0.9,
+    )
 
 display(pd.DataFrame(world.grid.T))
-display(pd.DataFrame(policy).T)
-display(pd.DataFrame(Q).T)
+final_policy = np.full((world.width, world.height), "          ")
+for i in range(world.width):
+    for j in range(world.height):
+        if world.is_terminal(i, j):
+            final_policy[(i, j)] = "termnal"
+        elif world.is_obstacle(i, j):
+            final_policy[(i, j)] = "###"
+        else:
+            final_policy[(i, j)] = max(Q[(i, j)], key=Q[(i, j)].get)
+display(pd.DataFrame(final_policy.T))
