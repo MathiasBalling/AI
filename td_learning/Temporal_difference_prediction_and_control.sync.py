@@ -24,6 +24,8 @@
 # %%
 import numpy as np
 import random
+import matplotlib.pyplot as plt
+from tqdm import tqdm
 import sys  # We use sys to get the max value of a float
 import pandas as pd  # We only use pandas for displaying tables nicely
 from IPython.display import display
@@ -326,6 +328,7 @@ def SARSA(
     epsilon=0.1,
     use_wind=False,
 ):
+    steps = 1
     # Initialize the starting action
     possible_actions = policy(Q, start_state, epsilon)
 
@@ -364,8 +367,9 @@ def SARSA(
         # Move to the next state and action
         current_action = next_action
         current_state = next_state
+        steps += 1
 
-    return Q
+    return Q, steps
 
 
 # %%
@@ -381,7 +385,7 @@ for x in range(world.width):
         Q[(x, y)] = {action: 0.0 for action in ACTIONS}
 
 for i in range(nb_episodes):
-    Q = SARSA(
+    Q, step = SARSA(
         world=world,
         start_state=(0, 0),
         policy=greedy_policy,
@@ -439,7 +443,7 @@ for x in range(world.width):
         Q[(x, y)] = {action: 0.0 for action in ACTIONS}
 
 for i in range(nb_episodes):
-    Q = SARSA(
+    Q, steps = SARSA(
         world=world,
         start_state=(0, 0),
         policy=greedy_policy,
@@ -501,7 +505,7 @@ for x in range(world.width):
         Q[(x, y)] = {action: 0.0 for action in ACTIONS}
 
 for i in range(nb_episodes):
-    Q = SARSA(
+    Q, steps = SARSA(
         world=world,
         start_state=(0, 0),
         policy=greedy_policy,
@@ -522,3 +526,424 @@ for i in range(world.width):
         else:
             final_policy[(i, j)] = max(Q[(i, j)], key=Q[(i, j)].get)
 display(pd.DataFrame(final_policy.T))
+
+
+# %%
+def q_learning(world: World, start_state, policy, Q, gamma=0.9, alpha=0.1, epsilon=0.1):
+    current_state = start_state
+    steps = 0
+    while not world.is_terminal(*current_state):
+        # Choose the next action based on the epsilon-greedy policy
+        possible_actions = policy(Q, current_state, epsilon)
+
+        # Initialize the starting action
+        current_action = random.choices(
+            population=list(possible_actions.keys()),
+            weights=list(possible_actions.values()),
+            k=1,
+        )[0]
+
+        # Get the next state and reward
+        next_state = world.get_next_state(current_state, current_action)
+        reward = world.get_reward(*next_state)
+
+        # Find the best next action in the next state
+        best_next_action_value = max(Q[next_state].values())
+
+        # Update the Q-table
+        Q[current_state][current_action] += alpha * (
+            reward + gamma * best_next_action_value - Q[current_state][current_action]
+        )
+
+        # Update the state
+        current_state = next_state
+        steps += 1
+
+    # Return the Q-table after training to be used as a policy
+    return Q, steps
+
+
+# %%[markdown]
+# # Compare SARSA and Q-learning
+# %%
+ACTIONS = ("up", "down", "left", "right")
+world = World(15, 15)
+world.add_terminal(14, 14, "+")
+world.add_obstacle(6, 7)
+world.add_obstacle(2, 2)
+display(pd.DataFrame(world.grid.T))
+
+n_episodes = 250
+instances = 50
+steps_total_qlear = [0] * n_episodes
+steps_total_sarsa = [0] * n_episodes
+
+
+for i in tqdm(range(instances)):
+    Q = {}
+    steps_temp = []
+    for x in range(world.width):
+        for y in range(world.height):
+            Q[(x, y)] = {action: 0.0 for action in ACTIONS}
+
+    for i in range(n_episodes):
+        Q, steps = SARSA(
+            world=world,
+            start_state=(0, 0),
+            policy=greedy_policy,
+            Q=Q,
+            gamma=0.9,
+            alpha=0.1,
+            epsilon=0.1,
+        )
+        steps_temp.append(steps)
+
+    steps_total_sarsa = [sum(values) for values in zip(steps_total_sarsa, steps_temp)]
+
+for i in tqdm(range(instances)):
+    Q = {}
+    steps_temp = []
+    for x in range(world.width):
+        for y in range(world.height):
+            Q[(x, y)] = {action: 0.0 for action in ACTIONS}
+
+    for i in range(n_episodes):
+        Q, steps = q_learning(
+            world=world,
+            start_state=(0, 0),
+            policy=greedy_policy,
+            Q=Q,
+            gamma=0.9,
+            alpha=0.1,
+            epsilon=0.1,
+        )
+        steps_temp.append(steps)
+    steps_total_qlear = [sum(values) for values in zip(steps_total_qlear, steps_temp)]
+
+steps_total_qlear = [value / instances for value in steps_total_qlear]
+steps_total_sarsa = [value / instances for value in steps_total_sarsa]
+# %%
+#
+fig = plt.figure(figsize=(8, 6), dpi=120)
+ax = fig.add_subplot(1, 1, 1)
+plt.ylim(20, 1000)
+plt.xlim(0, n_episodes)
+
+# Plot the
+ax.plot(steps_total_qlear, "r", markersize=1)
+ax.plot(steps_total_sarsa, "g", markersize=1)
+
+plt.xlabel("Episode")
+plt.ylabel("Steps")
+plt.legend(
+    [
+        "Q",
+        "SARSA",
+    ]
+)
+
+plt.title("SARSA vs Q-learning")
+
+plt.plot()
+# %%
+ACTIONS = ("up", "down", "left", "right")
+world = World(7, 7)
+world.add_terminal(6, 6, "+")
+world.add_obstacle(2, 3)
+world.add_obstacle(4, 1)
+display(pd.DataFrame(world.grid.T))
+
+n_episodes = 250
+Q = {}
+for x in range(world.width):
+    for y in range(world.height):
+        Q[(x, y)] = {action: 0.0 for action in ACTIONS}
+
+for i in range(n_episodes):
+    Q, step = SARSA(
+        world=world,
+        start_state=(0, 0),
+        policy=greedy_policy,
+        Q=Q,
+        gamma=0.9,
+        alpha=0.1,
+        epsilon=0.1,
+    )
+final_policy = np.full((world.width, world.height), "          ")
+final_values = np.full((world.width, world.height), 0.0)
+for i in range(world.width):
+    for j in range(world.height):
+        if world.is_terminal(i, j):
+            final_policy[(i, j)] = "termnal"
+        elif world.is_obstacle(i, j):
+            final_policy[(i, j)] = "#"
+        else:
+            final_policy[(i, j)] = max(Q[(i, j)], key=Q[(i, j)].get)
+            final_values[(i, j)] = max(Q[(i, j)].items(), key=lambda x: x[1])[1]
+display(pd.DataFrame(final_policy.T))
+display(pd.DataFrame(final_values.T))
+# %%
+ACTIONS = ("up", "down", "left", "right")
+world = World(7, 7)
+world.add_terminal(6, 6, "+")
+world.add_obstacle(2, 3)
+world.add_obstacle(4, 1)
+display(pd.DataFrame(world.grid.T))
+
+n_episodes = 250
+Q = {}
+for x in range(world.width):
+    for y in range(world.height):
+        Q[(x, y)] = {action: 0.0 for action in ACTIONS}
+
+for i in range(n_episodes):
+    Q, step = q_learning(
+        world=world,
+        start_state=(0, 0),
+        policy=greedy_policy,
+        Q=Q,
+        gamma=0.9,
+        alpha=0.1,
+        epsilon=0.1,
+    )
+final_policy = np.full((world.width, world.height), "          ")
+final_values = np.full((world.width, world.height), 0.0)
+for i in range(world.width):
+    for j in range(world.height):
+        if world.is_terminal(i, j):
+            final_policy[(i, j)] = "termnal"
+        elif world.is_obstacle(i, j):
+            final_policy[(i, j)] = "#"
+        else:
+            final_policy[(i, j)] = max(Q[(i, j)], key=Q[(i, j)].get)
+            final_values[(i, j)] = max(Q[(i, j)].items(), key=lambda x: x[1])[1]
+display(pd.DataFrame(final_policy.T))
+display(pd.DataFrame(final_values.T))
+# %%[markdown]
+# # Compare SARSA $\alpha$ and $\epsilon$
+# %%
+ACTIONS = ("up", "down", "left", "right")
+world = World(10, 10)
+world.add_terminal(9, 9, "+")
+world.add_obstacle(6, 7)
+world.add_obstacle(2, 2)
+display(pd.DataFrame(world.grid.T))
+
+n_episodes = 150
+instances = 150
+steps_total_sarsa_001 = [0] * n_episodes
+steps_total_sarsa_01 = [0] * n_episodes
+steps_total_sarsa_1 = [0] * n_episodes
+
+
+for i in tqdm(range(instances)):
+    Q = {}
+    steps_temp = []
+    for x in range(world.width):
+        for y in range(world.height):
+            Q[(x, y)] = {action: 0.0 for action in ACTIONS}
+
+    for i in range(n_episodes):
+        Q, steps = SARSA(
+            world=world,
+            start_state=(0, 0),
+            policy=greedy_policy,
+            Q=Q,
+            gamma=0.9,
+            alpha=0.01,
+            epsilon=0.1,
+        )
+        steps_temp.append(steps)
+
+    steps_total_sarsa_001 = [
+        sum(values) for values in zip(steps_total_sarsa_001, steps_temp)
+    ]
+
+
+for i in tqdm(range(instances)):
+    Q = {}
+    steps_temp = []
+    for x in range(world.width):
+        for y in range(world.height):
+            Q[(x, y)] = {action: 0.0 for action in ACTIONS}
+
+    for i in range(n_episodes):
+        Q, steps = SARSA(
+            world=world,
+            start_state=(0, 0),
+            policy=greedy_policy,
+            Q=Q,
+            gamma=0.9,
+            alpha=0.1,
+            epsilon=0.1,
+        )
+        steps_temp.append(steps)
+
+    steps_total_sarsa_01 = [
+        sum(values) for values in zip(steps_total_sarsa_01, steps_temp)
+    ]
+
+for i in tqdm(range(instances)):
+    Q = {}
+    steps_temp = []
+    for x in range(world.width):
+        for y in range(world.height):
+            Q[(x, y)] = {action: 0.0 for action in ACTIONS}
+
+    for i in range(n_episodes):
+        Q, steps = SARSA(
+            world=world,
+            start_state=(0, 0),
+            policy=greedy_policy,
+            Q=Q,
+            gamma=0.9,
+            alpha=1.0,
+            epsilon=0.1,
+        )
+        steps_temp.append(steps)
+
+    steps_total_sarsa_1 = [
+        sum(values) for values in zip(steps_total_sarsa_1, steps_temp)
+    ]
+
+steps_total_sarsa_001 = [value / instances for value in steps_total_sarsa_001]
+steps_total_sarsa_01 = [value / instances for value in steps_total_sarsa_01]
+steps_total_sarsa_1 = [value / instances for value in steps_total_sarsa_1]
+# %%
+fig = plt.figure(figsize=(8, 6), dpi=120)
+ax = fig.add_subplot(1, 1, 1)
+plt.ylim(20, 1000)
+plt.xlim(0, n_episodes)
+
+# Plot the
+ax.plot(steps_total_sarsa_001, "g", markersize=1)
+ax.plot(steps_total_sarsa_01, "b", markersize=1)
+ax.plot(steps_total_sarsa_1, "r", markersize=1)
+
+plt.xlabel("Episode")
+plt.ylabel("Steps")
+plt.legend(
+    [
+        "SARSA alpha=0.01",
+        "SARSA alpha=0.10",
+        "SARSA alpha=1.0",
+    ]
+)
+
+plt.title("SARSA Learning rate")
+
+plt.plot()
+# %%[markdown]
+# # Compare Q-learning $\alpha$ and $\epsilon$
+# %%
+ACTIONS = ("up", "down", "left", "right")
+world = World(10, 10)
+world.add_terminal(9, 9, "+")
+world.add_obstacle(6, 7)
+world.add_obstacle(2, 2)
+display(pd.DataFrame(world.grid.T))
+
+n_episodes = 150
+instances = 150
+steps_total_qlearning_001 = [0] * n_episodes
+steps_total_qlearning_01 = [0] * n_episodes
+steps_total_qlearning_1 = [0] * n_episodes
+
+
+for i in tqdm(range(instances)):
+    Q = {}
+    steps_temp = []
+    for x in range(world.width):
+        for y in range(world.height):
+            Q[(x, y)] = {action: 0.0 for action in ACTIONS}
+
+    for i in range(n_episodes):
+        Q, steps = q_learning(
+            world=world,
+            start_state=(0, 0),
+            policy=greedy_policy,
+            Q=Q,
+            gamma=0.9,
+            alpha=0.01,
+            epsilon=0.1,
+        )
+        steps_temp.append(steps)
+
+    steps_total_qlearning_001 = [
+        sum(values) for values in zip(steps_total_qlearning_001, steps_temp)
+    ]
+
+
+for i in tqdm(range(instances)):
+    Q = {}
+    steps_temp = []
+    for x in range(world.width):
+        for y in range(world.height):
+            Q[(x, y)] = {action: 0.0 for action in ACTIONS}
+
+    for i in range(n_episodes):
+        Q, steps = q_learning(
+            world=world,
+            start_state=(0, 0),
+            policy=greedy_policy,
+            Q=Q,
+            gamma=0.9,
+            alpha=0.1,
+            epsilon=0.1,
+        )
+        steps_temp.append(steps)
+
+    steps_total_qlearning_01 = [
+        sum(values) for values in zip(steps_total_qlearning_01, steps_temp)
+    ]
+
+for i in tqdm(range(instances)):
+    Q = {}
+    steps_temp = []
+    for x in range(world.width):
+        for y in range(world.height):
+            Q[(x, y)] = {action: 0.0 for action in ACTIONS}
+
+    for i in range(n_episodes):
+        Q, steps = q_learning(
+            world=world,
+            start_state=(0, 0),
+            policy=greedy_policy,
+            Q=Q,
+            gamma=0.9,
+            alpha=1.0,
+            epsilon=0.1,
+        )
+        steps_temp.append(steps)
+
+    steps_total_qlearning_1 = [
+        sum(values) for values in zip(steps_total_qlearning_1, steps_temp)
+    ]
+
+steps_total_qlearning_001 = [value / instances for value in steps_total_qlearning_001]
+steps_total_qlearning_01 = [value / instances for value in steps_total_qlearning_01]
+steps_total_qlearning_1 = [value / instances for value in steps_total_qlearning_1]
+# %%
+fig = plt.figure(figsize=(8, 6), dpi=120)
+ax = fig.add_subplot(1, 1, 1)
+plt.ylim(20, 1000)
+plt.xlim(0, n_episodes)
+
+# Plot the
+ax.plot(steps_total_qlearning_001, "g", markersize=1)
+ax.plot(steps_total_qlearning_01, "b", markersize=1)
+ax.plot(steps_total_qlearning_1, "r", markersize=1)
+
+plt.xlabel("Episode")
+plt.ylabel("Steps")
+plt.legend(
+    [
+        "Q-learning alpha=0.01",
+        "Q-learning alpha=0.10",
+        "Q-learning alpha=1.0",
+    ]
+)
+
+plt.title("Q-learning Learning rate")
+
+plt.plot()

@@ -21,8 +21,11 @@
 
 # %%
 import numpy as np
+import time
+from tqdm import tqdm
 from numpy._typing import NDArray
 import pandas as pd
+import matplotlib.pyplot as plt
 from IPython.display import display
 
 pd.options.display.float_format = "{:,.3f}".format
@@ -49,7 +52,7 @@ TERMINALS = ("+", "-")  # Note a terminal should also have a reward assigned
 OBSTACLES = "#"
 
 # Discount factor
-gamma = 0.8
+gamma = 0.5
 
 # The probability of a random move:
 rand_move_probability = 0
@@ -440,12 +443,13 @@ for a in ACTIONS:
 # Test your implementation and print out the policies found.
 
 # %%
+rand_move_probability = 0.5
 REWARDS = {" ": 0, ".": -0.1, "+": 10, "-": -10}
-world = World(4, 4)
+world = World(7, 7)
 world.add_terminal(0, 0, "+")
-world.add_terminal(3, 3, "-")
-world.add_obstacle(1, 1)
-world.add_obstacle(3, 2)
+world.add_terminal(5, 6, "-")
+world.add_obstacle(3, 1)
+world.add_obstacle(3, 5)
 
 # Start with a right policy everywhere
 polit_policy = np.full((world.width, world.height), "right", dtype="U5")
@@ -496,12 +500,13 @@ display(pd.DataFrame(V.T))
 # Test your implementation and display the policies found (i.e., a grid with the perferred action in each cell).
 
 # %%
+rand_move_probability = 0.5
 REWARDS = {" ": 0, ".": -0.1, "+": 10, "-": -10}
-world = World(4, 4)
+world = World(7, 7)
 world.add_terminal(0, 0, "+")
-world.add_terminal(3, 3, "-")
-world.add_obstacle(1, 1)
-world.add_obstacle(3, 2)
+world.add_terminal(5, 6, "-")
+world.add_obstacle(3, 1)
+world.add_obstacle(3, 5)
 
 # Start with a right policy everywhere
 valit_policy = np.full((world.width, world.height), "right", dtype="U5")
@@ -543,3 +548,114 @@ display(pd.DataFrame(valit_policy.T))
 
 # Display the final state values
 display(pd.DataFrame(V.T))
+# %% [markdown]
+# # Perf test
+# %% [markdown]
+REWARDS = {" ": 0, ".": -0.1, "+": 10, "-": -10}
+world = World(20, 20)
+world.add_terminal(19, 19, "+")
+world.add_terminal(5, 5, "-")
+world.add_obstacle(10, 10)
+world.add_obstacle(12, 16)
+
+# Display the world
+display(pd.DataFrame(world.grid.T))
+
+#### Policy evaluation
+# Start with a right policy everywhere
+valit_times = []
+polit_times = []
+
+for i in tqdm(range(100)):
+    polit_policy = np.full((world.width, world.height), "right", dtype="U5")
+
+    def policy_iteration_policy(x, y):
+        return {k: 1 if k == polit_policy[x, y] else 0 for k in ACTIONS}
+
+    polit_start = time.perf_counter()
+    V = iterative_policy_evaluation(world, policy_iteration_policy)
+    while True:
+        policy_stable = True
+        V = iterative_policy_evaluation(world, policy_iteration_policy)
+
+        for y in range(world.height):
+            for x in range(world.width):
+                if not world.is_obstacle(x, y):
+                    old_action = polit_policy[x, y]
+                    best_action = None
+                    best_value = -np.inf
+                    for a in ACTIONS:
+                        q = action_value(world, V, (x, y), a)
+                        if q > best_value:
+                            best_value = q
+                            best_action = a
+                    polit_policy[x, y] = best_action
+                    if old_action != best_action:
+                        policy_stable = False
+        if policy_stable:
+            break
+    polit_end = time.perf_counter()
+
+    ################################
+
+    #### Value evaluation
+    # Start with a right policy everywhere
+    valit_policy = np.full((world.width, world.height), "right", dtype="U5")
+
+    def value_iteration_policy(x, y):
+        return {k: 1 if k == valit_policy[x, y] else 0 for k in ACTIONS}
+
+    valit_start = time.perf_counter()
+    # Start with initial value estimates
+    V = iterative_policy_evaluation(world, value_iteration_policy)
+
+    theta = 1e-5
+    while True:
+        delta = 0
+        for y in range(world.height):
+            for x in range(world.width):
+                if not world.is_obstacle(x, y):
+                    old_value = V[x, y]
+                    best_value = -np.inf
+                    best_action = None
+                    for a in ACTIONS:
+                        q = action_value(world, V, (x, y), a)
+                        if q > best_value:
+                            best_action = a
+                            best_value = q
+                    V[x, y] = best_value
+                    valit_policy[x, y] = best_action
+                    delta = max(delta, abs(old_value - V[x, y]))
+        if delta <= theta:
+            break
+    valit_end = time.perf_counter()
+
+    # # Display the final policy
+    # display(pd.DataFrame(polit_policy.T))
+    #
+    # # Display the final policy
+    # display(pd.DataFrame(valit_policy.T))
+
+    polit_times.append(polit_end - polit_start)
+    valit_times.append(valit_end - valit_start)
+print(polit_times)
+print(valit_times)
+# %%
+polit_times_avg = np.average(polit_times)
+valit_times_avg = np.average(valit_times)
+print(polit_times_avg)
+print(valit_times_avg)
+print(polit_times_avg / valit_times_avg)
+
+
+plt.boxplot(polit_times)
+plt.title("Policy Iteration 100 runs 20x20 world")
+plt.ylabel("Seconds")
+plt.gca().axes.get_xaxis().set_visible(False)
+plt.show()
+
+plt.boxplot(valit_times)
+plt.title("Value Iteration 100 runs 20x20 world")
+plt.ylabel("Seconds")
+plt.gca().axes.get_xaxis().set_visible(False)
+plt.show()

@@ -32,6 +32,8 @@ import random
 import sys  # We use sys to get the max value of a float
 import pandas as pd  # We only use pandas for displaying tables nicely
 from IPython.display import display
+from tqdm import tqdm
+import matplotlib.pyplot as plt
 
 
 pd.options.display.float_format = "{:,.3f}".format
@@ -165,27 +167,13 @@ def greedy_policy(Q, state, epsilon):
     for action in ACTIONS:
         if Q[state][action] == max_value:
             a[action] += (1 - epsilon) / max_value_count
-
     return a
 
 
 def expected_SARSA(
     world: World, Q, start_state, policy, gamma=0.9, alpha=0.1, epsilon=0.1
 ):
-    """
-    Implements the SARSA algorithm for on-policy TD control.
-
-    Args:
-        world (World): The environment in which the agent operates.
-        n_episodes (int): The number of episodes to run the algorithm.
-        gamma (float): The discount factor.
-        alpha (float): The learning rate.
-        epsilon (float): The probability of selecting a random action (exploration).
-
-    Returns:
-        Q (dict): The Q-table containing state-action values.
-    """
-
+    steps = 1
     possible_actions = policy(Q, start_state, epsilon)
 
     # Initialize the starting action
@@ -221,8 +209,9 @@ def expected_SARSA(
         # Move to the next state and action
         current_action = next_action
         current_state = next_state
+        steps += 1
 
-    return Q
+    return Q, steps
 
 
 # %% [markdown]
@@ -242,7 +231,7 @@ for x in range(world.width):
         Q[(x, y)] = {action: 0.0 for action in ACTIONS}
 
 for i in range(n_episodes):
-    Q = expected_SARSA(
+    Q, steps = expected_SARSA(
         world, Q, (0, 0), greedy_policy, gamma=0.9, alpha=0.1, epsilon=0.1
     )
 
@@ -348,7 +337,58 @@ def n_step_SARSA(
         if tau == T - 1:
             break
         t += 1
-    return Q
+    return Q, T
+
+
+# %%
+def SARSA(
+    world: World,
+    start_state,
+    policy,
+    Q,
+    gamma=0.9,
+    alpha=0.1,
+    epsilon=0.1,
+):
+    steps = 1
+    # Initialize the starting action
+    possible_actions = policy(Q, start_state, epsilon)
+
+    # Initialize the starting action
+    current_action = random.choices(
+        population=list(possible_actions.keys()),
+        weights=list(possible_actions.values()),
+        k=1,
+    )[0]
+
+    current_state = start_state
+    while not world.is_terminal(*current_state):
+        # Get the next state, action, and reward
+        next_state = world.get_next_state(current_state, current_action)
+
+        possible_actions = policy(Q, current_state, epsilon)
+
+        next_action = random.choices(
+            population=list(possible_actions.keys()),
+            weights=list(possible_actions.values()),
+            k=1,
+        )[0]
+
+        reward = world.get_reward(*next_state)
+
+        # Update the Q-value for the current state-action pair
+        Q[current_state][current_action] += alpha * (
+            reward
+            + gamma * Q[next_state][next_action]
+            - Q[current_state][current_action]
+        )
+
+        # Move to the next state and action
+        current_action = next_action
+        current_state = next_state
+        steps += 1
+
+    return Q, steps
 
 
 # %%
@@ -365,7 +405,7 @@ for x in range(world.width):
         Q[(x, y)] = {action: 0.0 for action in ACTIONS}
 
 for i in range(n_episodes):
-    Q = n_step_SARSA(
+    Q, steps = n_step_SARSA(
         world=world,
         Q=Q,
         start_state=(1, 0),
@@ -387,3 +427,441 @@ for i in range(world.width):
         else:
             final_policy[(i, j)] = max(Q[(i, j)], key=Q[(i, j)].get)
 display(pd.DataFrame(final_policy.T))
+
+# %%[markdown]
+# # Compare SARSA with $\alpha$ to Expected SARSA
+# %%
+ACTIONS = ("up", "down", "left", "right")
+world = World(10, 10)
+world.add_terminal(9, 9, "+")
+world.add_obstacle(6, 7)
+world.add_obstacle(2, 2)
+display(pd.DataFrame(world.grid.T))
+
+n_episodes = 150
+instances = 150
+steps_total_sarsa_001 = [0] * n_episodes
+steps_total_sarsa_01 = [0] * n_episodes
+steps_total_sarsa_1 = [0] * n_episodes
+steps_total_sarsa_expected = [0] * n_episodes
+steps_total_sarsa_expected_01 = [0] * n_episodes
+
+
+for i in tqdm(range(instances)):
+    Q = {}
+    steps_temp = []
+    for x in range(world.width):
+        for y in range(world.height):
+            Q[(x, y)] = {action: 0.0 for action in ACTIONS}
+
+    for i in range(n_episodes):
+        Q, steps = SARSA(
+            world=world,
+            start_state=(0, 0),
+            policy=greedy_policy,
+            Q=Q,
+            gamma=0.9,
+            alpha=0.01,
+            epsilon=0.1,
+        )
+        steps_temp.append(steps)
+
+    steps_total_sarsa_001 = [
+        sum(values) for values in zip(steps_total_sarsa_001, steps_temp)
+    ]
+
+
+for i in tqdm(range(instances)):
+    Q = {}
+    steps_temp = []
+    for x in range(world.width):
+        for y in range(world.height):
+            Q[(x, y)] = {action: 0.0 for action in ACTIONS}
+
+    for i in range(n_episodes):
+        Q, steps = SARSA(
+            world=world,
+            start_state=(0, 0),
+            policy=greedy_policy,
+            Q=Q,
+            gamma=0.9,
+            alpha=0.1,
+            epsilon=0.1,
+        )
+        steps_temp.append(steps)
+
+    steps_total_sarsa_01 = [
+        sum(values) for values in zip(steps_total_sarsa_01, steps_temp)
+    ]
+
+for i in tqdm(range(instances)):
+    Q = {}
+    steps_temp = []
+    for x in range(world.width):
+        for y in range(world.height):
+            Q[(x, y)] = {action: 0.0 for action in ACTIONS}
+
+    for i in range(n_episodes):
+        Q, steps = SARSA(
+            world=world,
+            start_state=(0, 0),
+            policy=greedy_policy,
+            Q=Q,
+            gamma=0.9,
+            alpha=1.0,
+            epsilon=0.1,
+        )
+        steps_temp.append(steps)
+
+    steps_total_sarsa_1 = [
+        sum(values) for values in zip(steps_total_sarsa_1, steps_temp)
+    ]
+
+for i in tqdm(range(instances)):
+    Q = {}
+    steps_temp = []
+    for x in range(world.width):
+        for y in range(world.height):
+            Q[(x, y)] = {action: 0.0 for action in ACTIONS}
+
+    for i in range(n_episodes):
+        Q, steps = expected_SARSA(
+            world=world,
+            start_state=(0, 0),
+            policy=greedy_policy,
+            Q=Q,
+            gamma=0.9,
+            alpha=1.0,
+            epsilon=0.1,
+        )
+        steps_temp.append(steps)
+
+    steps_total_sarsa_expected = [
+        sum(values) for values in zip(steps_total_sarsa_expected, steps_temp)
+    ]
+for i in tqdm(range(instances)):
+    Q = {}
+    steps_temp = []
+    for x in range(world.width):
+        for y in range(world.height):
+            Q[(x, y)] = {action: 0.0 for action in ACTIONS}
+
+    for i in range(n_episodes):
+        Q, steps = expected_SARSA(
+            world=world,
+            start_state=(0, 0),
+            policy=greedy_policy,
+            Q=Q,
+            gamma=0.9,
+            alpha=0.5,
+            epsilon=0.1,
+        )
+        steps_temp.append(steps)
+
+    steps_total_sarsa_expected_01 = [
+        sum(values) for values in zip(steps_total_sarsa_expected_01, steps_temp)
+    ]
+
+steps_total_sarsa_001 = [value / instances for value in steps_total_sarsa_001]
+steps_total_sarsa_01 = [value / instances for value in steps_total_sarsa_01]
+steps_total_sarsa_1 = [value / instances for value in steps_total_sarsa_1]
+steps_total_sarsa_expected = [value / instances for value in steps_total_sarsa_expected]
+steps_total_sarsa_expected_01 = [
+    value / instances for value in steps_total_sarsa_expected_01
+]
+# %%
+fig = plt.figure(figsize=(8, 6), dpi=120)
+ax = fig.add_subplot(1, 1, 1)
+plt.ylim(20, 1000)
+plt.xlim(0, n_episodes)
+
+# Plot the
+ax.plot(steps_total_sarsa_001, "g", markersize=1)
+ax.plot(steps_total_sarsa_01, "b", markersize=1)
+ax.plot(steps_total_sarsa_1, "r", markersize=1)
+ax.plot(steps_total_sarsa_expected, "m", markersize=1)
+ax.plot(steps_total_sarsa_expected_01, "y", markersize=1)
+
+ax.set_yscale("log")
+plt.xlabel("Episode")
+plt.ylabel("Steps")
+plt.legend(
+    [
+        "SARSA alpha=0.01",
+        "SARSA alpha=0.1",
+        "SARSA alpha=1.0",
+        "Expected SARSA alpha=1",
+        "Expected SARSA alpha=0.1",
+    ]
+)
+
+plt.title("SARSA vs Expected SARSA")
+
+plt.plot()
+# %%[markdown]
+# # n-step SARSA
+# %%
+ACTIONS = ("up", "down", "left", "right")
+world = World(10, 10)
+world.add_terminal(9, 9, "+")
+world.add_obstacle(6, 7)
+world.add_obstacle(2, 2)
+display(pd.DataFrame(world.grid.T))
+
+n_episodes = 150
+instances = 150
+steps_total_sarsa_nstep_1 = [0] * n_episodes
+steps_total_sarsa_nstep_3 = [0] * n_episodes
+steps_total_sarsa_nstep_6 = [0] * n_episodes
+
+
+for i in tqdm(range(instances)):
+    Q = {}
+    steps_temp = []
+    for x in range(world.width):
+        for y in range(world.height):
+            Q[(x, y)] = {action: 0.0 for action in ACTIONS}
+
+    for i in range(n_episodes):
+        Q, steps = n_step_SARSA(
+            world=world,
+            start_state=(0, 0),
+            policy=greedy_policy,
+            Q=Q,
+            n=1,
+            gamma=0.9,
+            alpha=0.1,
+            epsilon=0.1,
+        )
+        steps_temp.append(steps)
+
+    steps_total_sarsa_nstep_1 = [
+        sum(values) for values in zip(steps_total_sarsa_nstep_1, steps_temp)
+    ]
+for i in tqdm(range(instances)):
+    Q = {}
+    steps_temp = []
+    for x in range(world.width):
+        for y in range(world.height):
+            Q[(x, y)] = {action: 0.0 for action in ACTIONS}
+
+    for i in range(n_episodes):
+        Q, steps = n_step_SARSA(
+            world=world,
+            start_state=(0, 0),
+            policy=greedy_policy,
+            Q=Q,
+            n=3,
+            gamma=0.9,
+            alpha=0.1,
+            epsilon=0.1,
+        )
+        steps_temp.append(steps)
+
+    steps_total_sarsa_nstep_3 = [
+        sum(values) for values in zip(steps_total_sarsa_nstep_3, steps_temp)
+    ]
+
+for i in tqdm(range(instances)):
+    Q = {}
+    steps_temp = []
+    for x in range(world.width):
+        for y in range(world.height):
+            Q[(x, y)] = {action: 0.0 for action in ACTIONS}
+
+    for i in range(n_episodes):
+        Q, steps = n_step_SARSA(
+            world=world,
+            start_state=(0, 0),
+            policy=greedy_policy,
+            Q=Q,
+            n=6,
+            gamma=0.9,
+            alpha=0.1,
+            epsilon=0.1,
+        )
+        steps_temp.append(steps)
+
+    steps_total_sarsa_nstep_6 = [
+        sum(values) for values in zip(steps_total_sarsa_nstep_6, steps_temp)
+    ]
+
+steps_total_sarsa_nstep_1 = [value / instances for value in steps_total_sarsa_nstep_1]
+steps_total_sarsa_nstep_3 = [value / instances for value in steps_total_sarsa_nstep_3]
+steps_total_sarsa_nstep_6 = [value / instances for value in steps_total_sarsa_nstep_6]
+# %%
+print(min(steps_total_sarsa_nstep_1))
+print(min(steps_total_sarsa_nstep_3))
+print(min(steps_total_sarsa_nstep_6))
+fig = plt.figure(figsize=(8, 6), dpi=120)
+ax = fig.add_subplot(1, 1, 1)
+plt.ylim(20, 650)
+plt.xlim(0, n_episodes)
+
+# Plot the
+ax.plot(steps_total_sarsa_nstep_1, "m", markersize=1)
+ax.plot(steps_total_sarsa_nstep_3, "g", markersize=1)
+ax.plot(steps_total_sarsa_nstep_6, "y", markersize=1)
+
+ax.set_yscale("log")
+plt.xlabel("Episode")
+plt.ylabel("Steps")
+plt.legend(
+    [
+        "N-step SARSA N=1",
+        "N-step SARSA N=3",
+        "N-step SARSA N=6",
+    ]
+)
+
+plt.title("N-Step SARSA")
+
+plt.plot()
+
+
+# %%
+def generate_episode(world: World, policy, start_state):
+    current_state = start_state
+    episode = []
+    while not world.is_terminal(*current_state):
+        # Get the possible actions and their probabilities that our policy says
+        # that the agent should perform in the current state:
+        possible_actions = policy(*current_state)
+
+        # Pick a weighted random action:
+        action = random.choices(
+            population=list(possible_actions.keys()),
+            weights=possible_actions.values(),
+            k=1,
+        )
+
+        # Get the next state from the world
+        next_state = world.get_next_state(current_state, action[0])
+
+        # Get the reward for performing the action
+        reward = world.get_reward(*next_state)
+
+        # Save the state, action and reward for this time step in our episode
+        episode.append([current_state, action[0], reward])
+
+        # Move the agent to the new state
+        current_state = next_state
+
+    return episode
+
+
+def mc_epsillon_soft(world, start_state, Q, policy, returns, gamma=0.9, epsilon=0.1):
+    episode = generate_episode(world, lambda x, y: policy[(x, y)], start_state)
+
+    G = 0
+    # Iterate forward through the episode
+    for idx in reversed(range(len(episode))):
+        state, action, reward = episode[idx]
+        G = gamma * G + reward
+        # Check if the (state, action) pair has been seen before in the episode
+        if (state, action) not in [(s, a) for s, a, _ in episode[:idx]]:
+            returns[state][action].append(G)
+            Q[state][action] = np.mean(returns[state][action])
+
+            # Update policy to be greedy
+            best_action = max(Q[state], key=Q[state].get)
+            for a in ACTIONS:
+                policy[state][a] = (
+                    1 - epsilon + epsilon / abs(policy[state][a])
+                    if a == best_action
+                    else epsilon / abs(policy[state][a])
+                )
+
+    return Q, policy, returns, len(episode)
+
+
+# %%
+
+ACTIONS = ("up", "down", "left", "right")
+world = World(10, 10)
+world.add_terminal(9, 9, "+")
+world.add_obstacle(6, 7)
+world.add_obstacle(2, 2)
+display(pd.DataFrame(world.grid.T))
+
+n_episodes = 300
+instances = 150
+steps_total_sarsa_nstep_10 = [0] * n_episodes
+steps_total_mc = [0] * n_episodes
+
+for i in tqdm(range(instances)):
+    Q = {}
+    policy = {}
+    returns = {}
+    steps_temp = []
+    for x in range(world.width):
+        for y in range(world.height):
+            Q[(x, y)] = {action: 0.0 for action in ACTIONS}
+            policy[(x, y)] = {action: 1 / len(ACTIONS) for action in ACTIONS}
+            returns[(x, y)] = {action: [] for action in ACTIONS}
+
+    for i in range(n_episodes):
+        Q, policy, returns, steps = mc_epsillon_soft(
+            world=world,
+            start_state=(0, 0),
+            Q=Q,
+            policy=policy,
+            returns=returns,
+            gamma=0.9,
+            epsilon=0.1,
+        )
+        steps_temp.append(steps)
+
+    steps_total_mc = [sum(values) for values in zip(steps_total_mc, steps_temp)]
+
+for i in tqdm(range(instances)):
+    Q = {}
+    steps_temp = []
+    for x in range(world.width):
+        for y in range(world.height):
+            Q[(x, y)] = {action: 0.0 for action in ACTIONS}
+
+    for i in range(n_episodes):
+        Q, steps = n_step_SARSA(
+            world=world,
+            start_state=(0, 0),
+            policy=greedy_policy,
+            Q=Q,
+            n=10,
+            gamma=0.9,
+            alpha=0.1,
+            epsilon=0.1,
+        )
+        steps_temp.append(steps)
+
+    steps_total_sarsa_nstep_10 = [
+        sum(values) for values in zip(steps_total_sarsa_nstep_10, steps_temp)
+    ]
+
+steps_total_sarsa_nstep_10 = [value / instances for value in steps_total_sarsa_nstep_10]
+steps_total_mc = [value / instances for value in steps_total_mc]
+# %%
+print(min(steps_total_mc))
+print(min(steps_total_sarsa_nstep_10))
+fig = plt.figure(figsize=(8, 6), dpi=120)
+ax = fig.add_subplot(1, 1, 1)
+plt.ylim(20, 1000)
+plt.xlim(0, n_episodes)
+
+# Plot the
+ax.plot(steps_total_sarsa_nstep_10, "y", markersize=1)
+ax.plot(steps_total_mc, "b", markersize=1)
+
+ax.set_yscale("log")
+plt.xlabel("Episode")
+plt.ylabel("Steps")
+plt.legend(
+    [
+        "N-step SARSA N=10",
+        "MC Epsilon Soft",
+    ]
+)
+
+plt.title("N-Step SARSA vs MC Epsilon Soft")
+
+plt.plot()

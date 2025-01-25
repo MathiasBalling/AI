@@ -433,7 +433,6 @@ from skfuzzy import control as ctrl
 universe_speed = np.arange(0, 20, 0.1)
 universe_range = np.arange(0, 100, 1)
 universe_angle = np.arange(-np.pi, np.pi, 0.01)
-universe_sensor_range = np.arange(0, 7, 0.1)
 
 # Output variables (speed of the left and right wheels)
 speed_left = ctrl.Consequent(universe_speed, "left_speed")
@@ -514,7 +513,6 @@ rule9 = ctrl.Rule(
 rule10 = ctrl.Rule(
     closest_obstacle_distance["out_of_range"], (speed_left["fast"], speed_right["fast"])
 )
-
 robot_ctrl = ctrl.ControlSystem(
     [rule1, rule2, rule3, rule4, rule5, rule6, rule7, rule8, rule9, rule10]
 )

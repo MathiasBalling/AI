@@ -31,6 +31,8 @@ import numpy as np
 import random
 import sys  # We use sys to get the max value of a float
 import pandas as pd  # We only use pandas for displaying tables nicely
+import matplotlib.pyplot as plt
+from tqdm import tqdm
 from IPython.display import display
 from pandas.core.arrays.arrow.accessors import ListAccessor
 
@@ -412,16 +414,18 @@ def mc_epsillon_soft(world, start_state, Q, policy, returns, gamma=0.9, epsilon=
                     else epsilon / abs(policy[state][a])
                 )
 
-    return Q, policy, returns
+    return Q, policy, returns, len(episode)
 
 
 # %% [markdown]
 # Try to experiment with your implementation by running it on different world sizes (be careful not to make your world too large or you should have multiple terminals that an agent is likely to hit, otherwise it may take too long), try to experiment with different numbers of episodes, and different values of epsilon:
 
 # %%
-world = World(4, 4)
-world.add_terminal(3, 3, "+")
-n_episodes = 10000
+world = World(5, 5)
+world.add_terminal(4, 4, "+")
+world.add_terminal(3, 0, "-")
+world.add_obstacle(2, 2)
+n_episodes = 1000
 
 Q = {}
 policy = {}
@@ -434,18 +438,19 @@ for x in range(world.width):
 
 
 for i in range(n_episodes):
-    Q, policy, returns = mc_epsillon_soft(
+    Q, policy, returns, steps = mc_epsillon_soft(
         world=world,
         start_state=(0, 0),
         Q=Q,
         policy=policy,
         returns=returns,
         gamma=0.9,
-        epsilon=0.1,
+        epsilon=0.01,
     )
 
 display(pd.DataFrame(world.grid.T))
 final_policy = np.full((world.width, world.height), "          ")
+final_values = np.full((world.width, world.height), 0.0)
 for i in range(world.width):
     for j in range(world.height):
         if world.is_terminal(i, j):
@@ -454,7 +459,11 @@ for i in range(world.width):
             final_policy[(i, j)] = "###"
         else:
             final_policy[(i, j)] = max(Q[(i, j)], key=Q[(i, j)].get)
+            final_values[(i, j)] = max(Q[(i, j)].items(), key=lambda x: x[1])[1]
+
+
 display(pd.DataFrame(final_policy.T))
+display(pd.DataFrame(final_values.T))
 
 # %% [markdown]
 # ### Optional exercise
@@ -495,17 +504,19 @@ def mc_exploring_starts(world, Q, policy, returns, gamma=0.9):
             max_value_count = sum(Q[state][action] == max_value for action in ACTIONS)
             for action in ACTIONS:
                 if Q[state][action] == max_value:
-                    policy[state][action] = 1 / max_value_count
+                    policy[state][action] = 1.0 / max_value_count
                 else:
-                    policy[state][action] = 0
+                    policy[state][action] = 0.0
 
-    return Q, policy, returns
+    return Q, policy, returns, len(episode)
 
 
 # %%
-world = World(4, 4)
-world.add_terminal(3, 3, "+")
-n_episodes = 10000
+world = World(5, 5)
+world.add_terminal(4, 4, "+")
+world.add_terminal(3, 0, "-")
+world.add_obstacle(2, 2)
+n_episodes = 1000
 
 Q = {}
 policy = {}
@@ -517,17 +528,17 @@ for x in range(world.width):
         returns[(x, y)] = {action: [] for action in ACTIONS}
 
 
-for i in range(n_episodes):
-    Q, policy, returns = mc_exploring_starts(
+for i in tqdm(range(n_episodes)):
+    Q, policy, returns, steps = mc_exploring_starts(
         world=world,
         Q=Q,
         policy=policy,
         returns=returns,
         gamma=0.9,
     )
-
 display(pd.DataFrame(world.grid.T))
 final_policy = np.full((world.width, world.height), "          ")
+final_values = np.full((world.width, world.height), 0.0)
 for i in range(world.width):
     for j in range(world.height):
         if world.is_terminal(i, j):
@@ -536,4 +547,205 @@ for i in range(world.width):
             final_policy[(i, j)] = "###"
         else:
             final_policy[(i, j)] = max(Q[(i, j)], key=Q[(i, j)].get)
+            final_values[(i, j)] = max(Q[(i, j)].items(), key=lambda x: x[1])[1]
 display(pd.DataFrame(final_policy.T))
+display(pd.DataFrame(final_values.T))
+
+# %% [markdown]
+# # Soft epsilon
+
+# %% [markdown]
+world = World(5, 5)
+world.add_terminal(3, 3, "+")
+n_episodes = 500
+epsilon_001 = 0.01
+epsilon_005 = 0.05
+epsilon_01 = 0.1
+instances = 1000
+
+steps_total_001 = [0] * n_episodes
+steps_total_01 = [0] * n_episodes
+steps_total_005 = [0] * n_episodes
+for i in tqdm(range(instances)):
+    Q = {}
+    policy = {}
+    returns = {}
+    steps_temp = []
+    for x in range(world.width):
+        for y in range(world.height):
+            Q[(x, y)] = {action: 0.0 for action in ACTIONS}
+            policy[(x, y)] = {action: 1 / len(ACTIONS) for action in ACTIONS}
+            returns[(x, y)] = {action: [] for action in ACTIONS}
+
+    for i in range(n_episodes):
+        Q, policy, returns, steps = mc_epsillon_soft(
+            world=world,
+            start_state=(0, 0),
+            Q=Q,
+            policy=policy,
+            returns=returns,
+            gamma=0.9,
+            epsilon=epsilon_001,
+        )
+        steps_temp.append(steps)
+    steps_total_001 = [sum(values) for values in zip(steps_total_001, steps_temp)]
+
+for i in tqdm(range(instances)):
+    Q = {}
+    policy = {}
+    returns = {}
+    steps_temp = []
+    for x in range(world.width):
+        for y in range(world.height):
+            Q[(x, y)] = {action: 0.0 for action in ACTIONS}
+            policy[(x, y)] = {action: 1 / len(ACTIONS) for action in ACTIONS}
+            returns[(x, y)] = {action: [] for action in ACTIONS}
+
+    for i in range(n_episodes):
+        Q, policy, returns, steps = mc_epsillon_soft(
+            world=world,
+            start_state=(0, 0),
+            Q=Q,
+            policy=policy,
+            returns=returns,
+            gamma=0.9,
+            epsilon=epsilon_01,
+        )
+        steps_temp.append(steps)
+    steps_total_01 = [sum(values) for values in zip(steps_total_01, steps_temp)]
+
+for i in tqdm(range(instances)):
+    Q = {}
+    policy = {}
+    returns = {}
+    steps_temp = []
+    for x in range(world.width):
+        for y in range(world.height):
+            Q[(x, y)] = {action: 0.0 for action in ACTIONS}
+            policy[(x, y)] = {action: 1 / len(ACTIONS) for action in ACTIONS}
+            returns[(x, y)] = {action: [] for action in ACTIONS}
+
+    for i in range(n_episodes):
+        Q, policy, returns, steps = mc_epsillon_soft(
+            world=world,
+            start_state=(0, 0),
+            Q=Q,
+            policy=policy,
+            returns=returns,
+            gamma=0.9,
+            epsilon=epsilon_005,
+        )
+        steps_temp.append(steps)
+    steps_total_005 = [sum(values) for values in zip(steps_total_005, steps_temp)]
+steps_total_001 = [value / instances for value in steps_total_001]
+steps_total_005 = [value / instances for value in steps_total_005]
+steps_total_01 = [value / instances for value in steps_total_01]
+# %%
+fig = plt.figure(figsize=(8, 6), dpi=120)
+ax = fig.add_subplot(1, 1, 1)
+plt.ylim(0, 100)
+plt.xlim(0, n_episodes)
+
+# Plot the
+ax.plot(steps_total_001, "r", markersize=1)
+ax.plot(steps_total_005, "g", markersize=1)
+ax.plot(steps_total_01, "y", markersize=1)
+
+plt.xlabel("Episode")
+plt.ylabel("Steps")
+plt.legend(
+    [
+        "Epsilon 0.01",
+        "Epsilon 0.05",
+        "Epsilon 0.1",
+    ]
+)
+
+plt.title(
+    f"Monte Carlo-based control with an epsilon-soft policy for {instances} instances."
+)
+
+plt.plot()
+
+# %% [markdown]
+# # Soft epsilon vs ES
+# %%
+world = World(4, 4)
+world.add_terminal(3, 3, "+")
+n_episodes = 500
+instances = 150
+
+steps_total_ES = [0] * n_episodes
+steps_total_MC = [0] * n_episodes
+
+for i in tqdm(range(instances)):
+    Q = {}
+    policy = {}
+    returns = {}
+    steps_temp = []
+    for x in range(world.width):
+        for y in range(world.height):
+            Q[(x, y)] = {action: 0.0 for action in ACTIONS}
+            policy[(x, y)] = {action: 1 / len(ACTIONS) for action in ACTIONS}
+            returns[(x, y)] = {action: [] for action in ACTIONS}
+
+    for i in range(n_episodes):
+        Q, policy, returns, steps = mc_exploring_starts(
+            world=world,
+            Q=Q,
+            policy=policy,
+            returns=returns,
+            gamma=0.9,
+        )
+        steps_temp.append(steps)
+    steps_total_ES = [sum(values) for values in zip(steps_total_ES, steps_temp)]
+
+for i in tqdm(range(instances)):
+    Q = {}
+    policy = {}
+    returns = {}
+    steps_temp = []
+    for x in range(world.width):
+        for y in range(world.height):
+            Q[(x, y)] = {action: 0.0 for action in ACTIONS}
+            policy[(x, y)] = {action: 1 / len(ACTIONS) for action in ACTIONS}
+            returns[(x, y)] = {action: [] for action in ACTIONS}
+
+    for i in range(n_episodes):
+        Q, policy, returns, steps = mc_epsillon_soft(
+            world=world,
+            start_state=(0, 0),
+            Q=Q,
+            policy=policy,
+            returns=returns,
+            gamma=0.9,
+            epsilon=0.01,
+        )
+        steps_temp.append(steps)
+    steps_total_MC = [sum(values) for values in zip(steps_total_MC, steps_temp)]
+
+
+steps_total_ES = [value / instances for value in steps_total_ES]
+steps_total_MC = [value / instances for value in steps_total_MC]
+# %%
+fig = plt.figure(figsize=(8, 6), dpi=120)
+ax = fig.add_subplot(1, 1, 1)
+plt.ylim(0, 100)
+plt.xlim(0, n_episodes)
+
+# Plot the
+ax.plot(steps_total_ES, "r", markersize=1)
+ax.plot(steps_total_MC, "b", markersize=1)
+
+plt.xlabel("Episode")
+plt.ylabel("Steps")
+plt.legend(
+    [
+        "ES",
+        "MC",
+    ]
+)
+
+plt.title(f"MC epsilon-soft policy vs MC Exploring Starts for {instances} instances.")
+
+plt.plot()

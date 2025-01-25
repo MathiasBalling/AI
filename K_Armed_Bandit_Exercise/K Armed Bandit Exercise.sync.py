@@ -30,6 +30,7 @@
 # %%
 import matplotlib.pyplot as plt
 import numpy as np
+from tqdm import tqdm
 
 # Setting the random seed allows for replication of results of experiments that
 # rely on np.random:
@@ -547,6 +548,531 @@ plt.title("UCB bandit performance on one problem instance")
 
 plt.plot()
 
+# %% [markdown]
+# # UpperConfidenceBound
+#
+# %%
+# Make a comparison between the algorithms using procents of times the best arm was found
+# Config:
+instances = 100
+arms = 10
+episodes = 5000
+c_05 = 0.5
+c_1 = 1
+c_2 = 2
+
+accumulated_history_of_mean_rewards_ucb_05 = np.zeros(episodes)
+accumulated_history_of_ideal_mean_rewards_ucb_05 = np.zeros(episodes)
+accumulated_history_of_correct_best_arm_ucb_05 = np.zeros(episodes)
+
+accumulated_history_of_mean_rewards_ucb_1 = np.zeros(episodes)
+accumulated_history_of_ideal_mean_rewards_ucb_1 = np.zeros(episodes)
+accumulated_history_of_correct_best_arm_ucb_1 = np.zeros(episodes)
+
+accumulated_history_of_mean_rewards_ucb_2 = np.zeros(episodes)
+accumulated_history_of_ideal_mean_rewards_ucb_2 = np.zeros(episodes)
+accumulated_history_of_correct_best_arm_ucb_2 = np.zeros(episodes)
+
+ucb_bandit_05 = None
+times_best_arm_found_ucb_05 = 0
+ucb_bandit_1 = None
+times_best_arm_found_ucb_1 = 0
+ucb_bandit_2 = None
+times_best_arm_found_ucb_2 = 0
+
+# Create and run instances:
+for i in tqdm(range(0, instances)):
+    means, variances = kArmedBandit.generate_instance(arms, -1, 1, 1)
+
+    instance_ucb_05 = kArmedBandit(means, variances)
+    instance_ucb_1 = kArmedBandit(means, variances)
+    instance_ucb_2 = kArmedBandit(means, variances)
+
+    ucb_bandit_05 = UpperConfidenceBound(instance_ucb_05, c_05)
+    ucb_bandit_05.run(episodes)
+
+    accumulated_history_of_ideal_mean_rewards_ucb_05 = (
+        accumulated_history_of_ideal_mean_rewards_ucb_05
+        + instance_ucb_05.history_of_ideal_mean_rewards
+    )
+    accumulated_history_of_mean_rewards_ucb_05 = (
+        accumulated_history_of_mean_rewards_ucb_05
+        + instance_ucb_05.history_of_mean_rewards
+    )
+    accumulated_history_of_correct_best_arm_ucb_05 = (
+        accumulated_history_of_correct_best_arm_ucb_05
+        + (
+            np.array(instance_ucb_05.history_of_plays)
+            == np.argmax(instance_ucb_05.true_means)
+        )
+    )
+
+    if ucb_bandit_05.best_arm == np.argmax(instance_ucb_05.true_means):
+        times_best_arm_found_ucb_05 += 1
+
+    ###
+    ucb_bandit_1 = UpperConfidenceBound(instance_ucb_1, c_1)
+    ucb_bandit_1.run(episodes)
+
+    accumulated_history_of_ideal_mean_rewards_ucb_1 = (
+        accumulated_history_of_ideal_mean_rewards_ucb_1
+        + instance_ucb_1.history_of_ideal_mean_rewards
+    )
+    accumulated_history_of_mean_rewards_ucb_1 = (
+        accumulated_history_of_mean_rewards_ucb_1
+        + instance_ucb_1.history_of_mean_rewards
+    )
+    accumulated_history_of_correct_best_arm_ucb_1 = (
+        accumulated_history_of_correct_best_arm_ucb_1
+        + (
+            np.array(instance_ucb_1.history_of_plays)
+            == np.argmax(instance_ucb_1.true_means)
+        )
+    )
+
+    if ucb_bandit_1.best_arm == np.argmax(instance_ucb_1.true_means):
+        times_best_arm_found_ucb_1 += 1
+
+    ###
+    ucb_bandit_2 = UpperConfidenceBound(instance_ucb_2, c_2)
+    ucb_bandit_2.run(episodes)
+
+    accumulated_history_of_ideal_mean_rewards_ucb_2 = (
+        accumulated_history_of_ideal_mean_rewards_ucb_2
+        + instance_ucb_2.history_of_ideal_mean_rewards
+    )
+    accumulated_history_of_mean_rewards_ucb_2 = (
+        accumulated_history_of_mean_rewards_ucb_2
+        + instance_ucb_2.history_of_mean_rewards
+    )
+    accumulated_history_of_correct_best_arm_ucb_2 = (
+        accumulated_history_of_correct_best_arm_ucb_2
+        + (
+            np.array(instance_ucb_2.history_of_plays)
+            == np.argmax(instance_ucb_2.true_means)
+        )
+    )
+
+    if ucb_bandit_2.best_arm == np.argmax(instance_ucb_2.true_means):
+        times_best_arm_found_ucb_2 += 1
+
+# ------------------------------------------------------------------------------#
+# Plot the rewards compared to the
+fig = plt.figure(figsize=(8, 6), dpi=120)
+ax = fig.add_subplot(1, 1, 1)
+plt.ylim(-0.5, 1.25)
+plt.xlim(0, episodes)
+
+# Plot the
+ax.plot(accumulated_history_of_ideal_mean_rewards_ucb_05 / instances, "b", markersize=1)
+ax.plot(accumulated_history_of_mean_rewards_ucb_05 / instances, "r", markersize=1)
+ax.plot(accumulated_history_of_mean_rewards_ucb_1 / instances, "m", markersize=1)
+ax.plot(accumulated_history_of_mean_rewards_ucb_2 / instances, "g", markersize=1)
+
+
+plt.xlabel("Episode")
+plt.ylabel("Reward")
+plt.legend(
+    [
+        "Ideal",
+        f"UCB c=0.5 ({times_best_arm_found_ucb_05}/{instances})",
+        f"UCB c=1 ({times_best_arm_found_ucb_1}/{instances})",
+        f"UCB c=2 ({times_best_arm_found_ucb_2}/{instances})",
+    ]
+)
+
+plt.title(f"UCB performance on {instances} instances")
+
+plt.plot()
+
+# ------------------------------------------------------------------------------#
+# # Make a comparison between the algorithms using procents of times the best arm was found
+fig = plt.figure(figsize=(8, 6), dpi=120)
+ax = fig.add_subplot(1, 1, 1)
+plt.ylim(0, 110)
+plt.xlim(0, episodes)
+
+# Plot the
+ax.plot(np.ones(episodes) * 100, "b", markersize=1)
+ax.plot(
+    accumulated_history_of_correct_best_arm_ucb_05 / instances * 100, "r", markersize=1
+)
+ax.plot(
+    accumulated_history_of_correct_best_arm_ucb_1 / instances * 100, "m", markersize=1
+)
+ax.plot(
+    accumulated_history_of_correct_best_arm_ucb_2 / instances * 100, "g", markersize=1
+)
+
+
+plt.xlabel("Episode")
+plt.ylabel("Optimal action (%)")
+plt.legend(
+    [
+        "Ideal",
+        f"UCB c=0.5 ({times_best_arm_found_ucb_05}/{instances})",
+        f"UCB c=1 ({times_best_arm_found_ucb_1}/{instances})",
+        f"UCB c=2 ({times_best_arm_found_ucb_2}/{instances})",
+    ]
+)
+
+plt.title(f"Correctness accumulated UCB performance on {instances} instances")
+plt.plot()
+
+# %% [markdown]
+# # Greedy
+# %%
+# Config:
+instances = 100
+arms = 10
+episodes = 5000
+epsilon_0 = 0
+epsilon_001 = 0.01
+epsilon_01 = 0.1
+
+accumulated_history_of_mean_rewards_greedy_0 = np.zeros(episodes)
+accumulated_history_of_ideal_mean_rewards_greedy_0 = np.zeros(episodes)
+accumulated_history_of_correct_best_arm_greedy_0 = np.zeros(episodes)
+
+accumulated_history_of_mean_rewards_greedy_001 = np.zeros(episodes)
+accumulated_history_of_ideal_mean_rewards_greedy_001 = np.zeros(episodes)
+accumulated_history_of_correct_best_arm_greedy_001 = np.zeros(episodes)
+
+accumulated_history_of_mean_rewards_greedy_01 = np.zeros(episodes)
+accumulated_history_of_ideal_mean_rewards_greedy_01 = np.zeros(episodes)
+accumulated_history_of_correct_best_arm_greedy_01 = np.zeros(episodes)
+
+greedy_bandit_0 = None
+times_best_arm_found_greedy_0 = 0
+greedy_bandit_001 = None
+times_best_arm_found_greedy_001 = 0
+greedy_bandit_01 = None
+times_best_arm_found_greedy_01 = 0
+
+# Create and run instances:
+for i in tqdm(range(0, instances)):
+    means, variances = kArmedBandit.generate_instance(arms, -1, 1, 1)
+
+    instance_greedy_0 = kArmedBandit(means, variances)
+    instance_greedy_001 = kArmedBandit(means, variances)
+    instance_greedy_01 = kArmedBandit(means, variances)
+
+    greedy_bandit_0 = EpsilonGreedyAlgorithm(instance_greedy_0, epsilon_0)
+    greedy_bandit_0.run(episodes)
+
+    accumulated_history_of_ideal_mean_rewards_greedy_0 = (
+        accumulated_history_of_ideal_mean_rewards_greedy_0
+        + instance_greedy_0.history_of_ideal_mean_rewards
+    )
+    accumulated_history_of_mean_rewards_greedy_0 = (
+        accumulated_history_of_mean_rewards_greedy_0
+        + instance_greedy_0.history_of_mean_rewards
+    )
+    accumulated_history_of_correct_best_arm_greedy_0 = (
+        accumulated_history_of_correct_best_arm_greedy_0
+        + (
+            np.array(instance_greedy_0.history_of_plays)
+            == np.argmax(instance_greedy_0.true_means)
+        )
+    )
+
+    if greedy_bandit_0.best_arm == np.argmax(instance_greedy_0.true_means):
+        times_best_arm_found_greedy_0 += 1
+
+    ###
+    greedy_bandit_001 = EpsilonGreedyAlgorithm(instance_greedy_001, epsilon_001)
+    greedy_bandit_001.run(episodes)
+
+    accumulated_history_of_ideal_mean_rewards_greedy_001 = (
+        accumulated_history_of_ideal_mean_rewards_greedy_001
+        + instance_greedy_001.history_of_ideal_mean_rewards
+    )
+    accumulated_history_of_mean_rewards_greedy_001 = (
+        accumulated_history_of_mean_rewards_greedy_001
+        + instance_greedy_001.history_of_mean_rewards
+    )
+    accumulated_history_of_correct_best_arm_greedy_001 = (
+        accumulated_history_of_correct_best_arm_greedy_001
+        + (
+            np.array(instance_greedy_001.history_of_plays)
+            == np.argmax(instance_greedy_001.true_means)
+        )
+    )
+
+    if greedy_bandit_001.best_arm == np.argmax(instance_greedy_001.true_means):
+        times_best_arm_found_greedy_001 += 1
+
+    ###
+    greedy_bandit_01 = EpsilonGreedyAlgorithm(instance_greedy_01, epsilon_01)
+    greedy_bandit_01.run(episodes)
+
+    accumulated_history_of_ideal_mean_rewards_greedy_01 = (
+        accumulated_history_of_ideal_mean_rewards_greedy_01
+        + instance_greedy_01.history_of_ideal_mean_rewards
+    )
+    accumulated_history_of_mean_rewards_greedy_01 = (
+        accumulated_history_of_mean_rewards_greedy_01
+        + instance_greedy_01.history_of_mean_rewards
+    )
+    accumulated_history_of_correct_best_arm_greedy_01 = (
+        accumulated_history_of_correct_best_arm_greedy_01
+        + (
+            np.array(instance_greedy_01.history_of_plays)
+            == np.argmax(instance_greedy_01.true_means)
+        )
+    )
+
+    if greedy_bandit_01.best_arm == np.argmax(instance_greedy_01.true_means):
+        times_best_arm_found_greedy_01 += 1
+
+# ------------------------------------------------------------------------------#
+# Plot the rewards compared to the
+fig = plt.figure(figsize=(8, 6), dpi=120)
+ax = fig.add_subplot(1, 1, 1)
+plt.ylim(-0.5, 1.25)
+plt.xlim(0, episodes)
+
+# Plot the
+ax.plot(
+    accumulated_history_of_ideal_mean_rewards_greedy_0 / instances, "b", markersize=1
+)
+ax.plot(accumulated_history_of_mean_rewards_greedy_0 / instances, "r", markersize=1)
+ax.plot(accumulated_history_of_mean_rewards_greedy_001 / instances, "m", markersize=1)
+ax.plot(accumulated_history_of_mean_rewards_greedy_01 / instances, "g", markersize=1)
+
+
+plt.xlabel("Episode")
+plt.ylabel("Reward")
+plt.legend(
+    [
+        "Ideal",
+        f"Greedy epsilon=0 ({times_best_arm_found_greedy_0}/{instances})",
+        f"Greedy epsilon=0.01 ({times_best_arm_found_greedy_001}/{instances})",
+        f"Greedy epsilon=0.1 ({times_best_arm_found_greedy_01}/{instances})",
+    ]
+)
+
+plt.title(f"greedy performance on {instances} instances")
+
+plt.plot()
+
+# ------------------------------------------------------------------------------#
+# # Make a comparison between the algorithms using procents of times the best arm was found
+fig = plt.figure(figsize=(8, 6), dpi=120)
+ax = fig.add_subplot(1, 1, 1)
+plt.ylim(0, 110)
+plt.xlim(0, episodes)
+
+# Plot the
+ax.plot(np.ones(episodes) * 100, "b", markersize=1)
+ax.plot(
+    accumulated_history_of_correct_best_arm_greedy_0 / instances * 100,
+    "r",
+    markersize=1,
+)
+ax.plot(
+    accumulated_history_of_correct_best_arm_greedy_001 / instances * 100,
+    "m",
+    markersize=1,
+)
+ax.plot(
+    accumulated_history_of_correct_best_arm_greedy_01 / instances * 100,
+    "g",
+    markersize=1,
+)
+
+
+plt.xlabel("Episode")
+plt.ylabel("Optimal action (%)")
+plt.legend(
+    [
+        "Ideal",
+        f"Greedy epsilon=0 ({times_best_arm_found_greedy_0}/{instances})",
+        f"Greedy epsilon=0.01 ({times_best_arm_found_greedy_001}/{instances})",
+        f"Greedy epsilon=0.1 ({times_best_arm_found_greedy_01}/{instances})",
+    ]
+)
+
+plt.title(f"Correctness accumulated greedy performance on {instances} instances")
+plt.plot()
+# %% [markdown]
+# # UniformBanditAlgorithm
+#
+# %%
+# Config:
+instances = 100
+arms = 10
+episodes = 15000
+w_10 = 10
+w_50 = 50
+w_100 = 100
+
+accumulated_history_of_mean_rewards_uniform_10 = np.zeros(episodes)
+accumulated_history_of_ideal_mean_rewards_uniform_10 = np.zeros(episodes)
+accumulated_history_of_correct_best_arm_uniform_10 = np.zeros(episodes)
+
+accumulated_history_of_mean_rewards_uniform_50 = np.zeros(episodes)
+accumulated_history_of_ideal_mean_rewards_uniform_50 = np.zeros(episodes)
+accumulated_history_of_correct_best_arm_uniform_50 = np.zeros(episodes)
+
+accumulated_history_of_mean_rewards_uniform_100 = np.zeros(episodes)
+accumulated_history_of_ideal_mean_rewards_uniform_100 = np.zeros(episodes)
+accumulated_history_of_correct_best_arm_uniform_100 = np.zeros(episodes)
+
+uniform_bandit_10 = None
+times_best_arm_found_uniform_10 = 0
+uniform_bandit_50 = None
+times_best_arm_found_uniform_50 = 0
+uniform_bandit_100 = None
+times_best_arm_found_uniform_100 = 0
+
+# Create and run instances:
+for i in tqdm(range(0, instances)):
+    means, variances = kArmedBandit.generate_instance(arms, -1, 1, 1)
+
+    instance_uniform_10 = kArmedBandit(means, variances)
+    instance_uniform_50 = kArmedBandit(means, variances)
+    instance_uniform_100 = kArmedBandit(means, variances)
+
+    uniform_bandit_10 = UniformBanditAlgorithm(instance_uniform_10, w_10)
+    uniform_bandit_10.run(episodes)
+
+    accumulated_history_of_ideal_mean_rewards_uniform_10 = (
+        accumulated_history_of_ideal_mean_rewards_uniform_10
+        + instance_uniform_10.history_of_ideal_mean_rewards
+    )
+    accumulated_history_of_mean_rewards_uniform_10 = (
+        accumulated_history_of_mean_rewards_uniform_10
+        + instance_uniform_10.history_of_mean_rewards
+    )
+    accumulated_history_of_correct_best_arm_uniform_10 = (
+        accumulated_history_of_correct_best_arm_uniform_10
+        + (
+            np.array(instance_uniform_10.history_of_plays)
+            == np.argmax(instance_uniform_10.true_means)
+        )
+    )
+
+    if uniform_bandit_10.best_arm == np.argmax(instance_uniform_10.true_means):
+        times_best_arm_found_uniform_10 += 1
+
+    ###
+    uniform_bandit_50 = UniformBanditAlgorithm(instance_uniform_50, w_50)
+    uniform_bandit_50.run(episodes)
+
+    accumulated_history_of_ideal_mean_rewards_uniform_50 = (
+        accumulated_history_of_ideal_mean_rewards_uniform_50
+        + instance_uniform_50.history_of_ideal_mean_rewards
+    )
+    accumulated_history_of_mean_rewards_uniform_50 = (
+        accumulated_history_of_mean_rewards_uniform_50
+        + instance_uniform_50.history_of_mean_rewards
+    )
+    accumulated_history_of_correct_best_arm_uniform_50 = (
+        accumulated_history_of_correct_best_arm_uniform_50
+        + (
+            np.array(instance_uniform_50.history_of_plays)
+            == np.argmax(instance_uniform_50.true_means)
+        )
+    )
+
+    if uniform_bandit_50.best_arm == np.argmax(instance_uniform_50.true_means):
+        times_best_arm_found_uniform_50 += 1
+
+    ###
+    uniform_bandit_100 = UniformBanditAlgorithm(instance_uniform_100, w_100)
+    uniform_bandit_100.run(episodes)
+
+    accumulated_history_of_ideal_mean_rewards_uniform_100 = (
+        accumulated_history_of_ideal_mean_rewards_uniform_100
+        + instance_uniform_100.history_of_ideal_mean_rewards
+    )
+    accumulated_history_of_mean_rewards_uniform_100 = (
+        accumulated_history_of_mean_rewards_uniform_100
+        + instance_uniform_100.history_of_mean_rewards
+    )
+    accumulated_history_of_correct_best_arm_uniform_100 = (
+        accumulated_history_of_correct_best_arm_uniform_100
+        + (
+            np.array(instance_uniform_100.history_of_plays)
+            == np.argmax(instance_uniform_100.true_means)
+        )
+    )
+
+    if uniform_bandit_100.best_arm == np.argmax(instance_uniform_100.true_means):
+        times_best_arm_found_uniform_100 += 1
+
+# ------------------------------------------------------------------------------#
+# Plot the rewards compared to the
+fig = plt.figure(figsize=(8, 6), dpi=120)
+ax = fig.add_subplot(1, 1, 1)
+plt.ylim(-0.5, 1.25)
+plt.xlim(0, episodes)
+
+# Plot the
+ax.plot(
+    accumulated_history_of_ideal_mean_rewards_uniform_10 / instances, "b", markersize=1
+)
+ax.plot(accumulated_history_of_mean_rewards_uniform_10 / instances, "r", markersize=1)
+ax.plot(accumulated_history_of_mean_rewards_uniform_50 / instances, "m", markersize=1)
+ax.plot(accumulated_history_of_mean_rewards_uniform_100 / instances, "g", markersize=1)
+
+
+plt.xlabel("Episode")
+plt.ylabel("Reward")
+plt.legend(
+    [
+        "Ideal",
+        f"uniform w=10 ({times_best_arm_found_uniform_10}/{instances})",
+        f"uniform w=50 ({times_best_arm_found_uniform_50}/{instances})",
+        f"uniform w=100 ({times_best_arm_found_uniform_100}/{instances})",
+    ]
+)
+
+plt.title(f"uniform performance on {instances} instances")
+
+plt.plot()
+
+# ------------------------------------------------------------------------------#
+# # Make a comparison between the algorithms using procents of times the best arm was found
+fig = plt.figure(figsize=(8, 6), dpi=120)
+ax = fig.add_subplot(1, 1, 1)
+plt.ylim(0, 110)
+plt.xlim(0, episodes)
+
+# Plot the
+ax.plot(np.ones(episodes) * 100, "b", markersize=1)
+ax.plot(
+    accumulated_history_of_correct_best_arm_uniform_10 / instances * 100,
+    "r",
+    markersize=1,
+)
+ax.plot(
+    accumulated_history_of_correct_best_arm_uniform_50 / instances * 100,
+    "m",
+    markersize=1,
+)
+ax.plot(
+    accumulated_history_of_correct_best_arm_uniform_100 / instances * 100,
+    "g",
+    markersize=1,
+)
+
+
+plt.xlabel("Episode")
+plt.ylabel("Optimal action (%)")
+plt.legend(
+    [
+        "Ideal",
+        f"uniform w=10 ({times_best_arm_found_uniform_10}/{instances})",
+        f"uniform w=50 ({times_best_arm_found_uniform_50}/{instances})",
+        f"uniform w=100 ({times_best_arm_found_uniform_100}/{instances})",
+    ]
+)
+
+plt.title(f"Correctness accumulated uniform performance on {instances} instances")
+plt.plot()
+
 # %%
 # Make a comparison between the algorithms using procents of times the best arm was found
 # Config:
@@ -554,8 +1080,8 @@ instances = 100
 arms = 10
 episodes = 5000
 w = 100
-epsilon = 0.04
-c = 0.5
+epsilon = 0.1
+c = 1
 
 # Accumulate results across instances data for plotting:
 accumulated_history_of_mean_rewards_greedy = np.zeros(episodes)
@@ -578,7 +1104,7 @@ ucb_bandit = None
 times_best_arm_found_ucb = 0
 
 # Create and run instances:
-for i in range(0, instances):
+for i in tqdm(range(0, instances)):
     means, variances = kArmedBandit.generate_instance(arms, -1, 1, 1)
 
     instance_greedy = kArmedBandit(means, variances)
